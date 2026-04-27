@@ -175,7 +175,7 @@
                             cleanBody = match[1].trim();
                         }
                         
-                        document.getElementById('tooltip-body').textContent = cleanBody;
+                        document.getElementById('tooltip-body').innerHTML = cleanBody.replace(/\n/g, '<br>');
                         
                         // Position tooltip near the point but keep inside canvas
                         let tipX = coords.x + 15;
