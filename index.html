@@ -163,7 +163,7 @@
             
             const payload = `--- BEGIN VERIFIED MARK ---\nHash: ${hash}\nTimestamp: ${timestamp}\n\n${input}\n--- END VERIFIED MARK ---`;
             
-            document.getElementById('payload-box').textContent = payload;
+            document.getElementById('payload-box').innerHTML = payload.replace(/\n/g, '<br>');
             document.getElementById('signature-output').style.display = 'block';
         }
 
