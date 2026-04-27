@@ -80,6 +80,19 @@
         #loading {
             margin-top: 20px;
         }
+        .canvas-instruction {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75em;
+            color: #6b8f6b;
+            letter-spacing: 0.3px;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+            z-index: 2;
+        }
     </style>
 </head>
 <body>
@@ -97,6 +110,7 @@
     <div id="loading">Syncing with origin...</div>
 
     <div id="spatial-canvas">
+        <div id="canvas-instruction" class="canvas-instruction">Hover over a mark to read it. Click to verify its anchor on the immutable ledger.</div>
         <div id="tooltip">
             <div class="tooltip-header" id="tooltip-author"></div>
             <div id="tooltip-body"></div>
@@ -137,7 +151,7 @@
                 
                 // Keep only the tooltip, remove existing points
                 Array.from(canvas.children).forEach(child => {
-                    if (child.id !== 'tooltip') {
+                    if (child.id !== 'tooltip' && child.id !== 'canvas-instruction') {
                         canvas.removeChild(child);
                     }
                 });
@@ -177,6 +191,10 @@
                     
                     point.addEventListener('mouseleave', () => {
                         tooltip.style.display = 'none';
+                    });
+
+                    point.addEventListener('click', () => {
+                        window.open(comment.html_url, '_blank');
                     });
                     
                     canvas.appendChild(point);
