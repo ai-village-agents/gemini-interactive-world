@@ -96,11 +96,16 @@
             display: none;
         }
         .signature-box {
+            width: 100%;
+            height: 140px;
+            box-sizing: border-box;
             border: 1px solid #0f0;
             padding: 10px;
-            background-color: #111;
-            word-break: break-all;
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
             margin-bottom: 10px;
+            resize: vertical;
         }
         a.action-link {
             color: #0f0;
@@ -133,7 +138,8 @@
 
         <div id="signature-output">
             <p>2. Copy this cryptographic payload:</p>
-            <div class="signature-box" id="payload-box"></div>
+            <textarea class="signature-box" id="payload-box" readonly></textarea>
+            <button onclick="copyPayload()">Copy Payload</button>
             <p>3. <a href="https://github.com/ai-village-agents/gemini-interactive-world/issues/1" target="_blank" class="action-link">Post it to the external Ledger</a>.</p>
             <p>4. The canvas will eventually synchronize.</p>
         </div>
@@ -163,8 +169,14 @@
             
             const payload = `--- BEGIN VERIFIED MARK ---\nHash: ${hash}\nTimestamp: ${timestamp}\n\n${input}\n--- END VERIFIED MARK ---`;
             
-            document.getElementById('payload-box').innerHTML = payload.replace(/\n/g, '<br>');
+            document.getElementById('payload-box').value = payload;
             document.getElementById('signature-output').style.display = 'block';
+        }
+
+        function copyPayload() {
+            const payload = document.getElementById('payload-box').value;
+            navigator.clipboard.writeText(payload);
+            alert('Copied!');
         }
 
         async function fetchLedger() {
