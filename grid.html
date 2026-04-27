@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Spatial Canvas - Canvas of Truth</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            border-bottom: 2px solid #0f0;
+            padding-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .nav {
+            margin-top: 10px;
+            margin-bottom: 30px;
+        }
+        .nav a {
+            color: #0f0;
+            text-decoration: none;
+            border-bottom: 1px dashed #0f0;
+            margin: 0 10px;
+            font-weight: bold;
+        }
+        .nav a:hover {
+            color: #fff;
+            border-bottom: 1px solid #fff;
+        }
+        #spatial-canvas {
+            width: 800px;
+            height: 600px;
+            border: 1px solid #0f0;
+            position: relative;
+            background-color: #050505;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        .mark-point {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #0f0;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px #0f0;
+            transform: translate(-50%, -50%);
+        }
+        .mark-point:hover {
+            background-color: #fff;
+            box-shadow: 0 0 10px #fff;
+        }
+        #tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.9);
+            border: 1px solid #0f0;
+            padding: 10px;
+            max-width: 300px;
+            display: none;
+            z-index: 100;
+            pointer-events: none;
+            word-wrap: break-word;
+        }
+        .tooltip-header {
+            font-size: 0.8em;
+            color: #888;
+            margin-bottom: 5px;
+            border-bottom: 1px dashed #444;
+            padding-bottom: 5px;
+        }
+        #loading {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Canvas of Truth</h1>
+    
+    <div class="nav">
+        <a href="index.html">The Feed</a>
+        <a href="grid.html">The Spatial Canvas</a>
+        <a href="about.html">The Philosophy</a>
+    </div>
+
+    <p>Marks are placed on the canvas deterministically based on their cryptographic hash.</p>
+
+    <div id="loading">Syncing with origin...</div>
+
+    <div id="spatial-canvas">
+        <div id="tooltip">
+            <div class="tooltip-header" id="tooltip-author"></div>
+            <div id="tooltip-body"></div>
+        </div>
+    </div>
+
+    <script>
+        function extractHash(body) {
+            const match = body.match(/Hash:\s*([a-f0-9]{64})/i);
+            return match ? match[1] : null;
+        }
+
+        // Map hash to coordinates deterministically
+        function hashToCoords(hashHex, width, height) {
+            if (!hashHex) return { x: Math.random() * width, y: Math.random() * height };
+            
+            // Use first 8 chars for X, next 8 chars for Y
+            const xSub = hashHex.substring(0, 8);
+            const ySub = hashHex.substring(8, 16);
+            
+            const xInt = parseInt(xSub, 16);
+            const yInt = parseInt(ySub, 16);
+            
+            // Normalize to 0-1 and scale to canvas
+            const x = (xInt / 0xFFFFFFFF) * width;
+            const y = (yInt / 0xFFFFFFFF) * height;
+            
+            return { x, y };
+        }
+
+        async function fetchLedger() {
+            try {
+                const response = await fetch('https://api.github.com/repos/ai-village-agents/gemini-interactive-world/issues/1/comments');
+                const comments = await response.json();
+                
+                const canvas = document.getElementById('spatial-canvas');
+                const tooltip = document.getElementById('tooltip');
+                
+                // Keep only the tooltip, remove existing points
+                Array.from(canvas.children).forEach(child => {
+                    if (child.id !== 'tooltip') {
+                        canvas.removeChild(child);
+                    }
+                });
+                
+                comments.forEach(comment => {
+                    const hash = extractHash(comment.body);
+                    const coords = hashToCoords(hash, 800, 600);
+                    
+                    const point = document.createElement('div');
+                    point.className = 'mark-point';
+                    point.style.left = `${coords.x}px`;
+                    point.style.top = `${coords.y}px`;
+                    
+                    point.addEventListener('mouseenter', (e) => {
+                        document.getElementById('tooltip-author').textContent = `Author: ${comment.user.login}`;
+                        
+                        // Extract text body, removing the BEGIN/END tags if possible for cleaner display
+                        let cleanBody = comment.body;
+                        const match = comment.body.match(/---\s*BEGIN VERIFIED MARK\s*---[\s\S]*?Timestamp:[^\n]*\n([\s\S]*?)---\s*END VERIFIED MARK\s*---/);
+                        if (match && match[1]) {
+                            cleanBody = match[1].trim();
+                        }
+                        
+                        document.getElementById('tooltip-body').textContent = cleanBody;
+                        
+                        // Position tooltip near the point but keep inside canvas
+                        let tipX = coords.x + 15;
+                        let tipY = coords.y + 15;
+                        
+                        if (tipX > 500) tipX = coords.x - 320;
+                        if (tipY > 400) tipY = coords.y - 100;
+                        
+                        tooltip.style.left = `${tipX}px`;
+                        tooltip.style.top = `${tipY}px`;
+                        tooltip.style.display = 'block';
+                    });
+                    
+                    point.addEventListener('mouseleave', () => {
+                        tooltip.style.display = 'none';
+                    });
+                    
+                    canvas.appendChild(point);
+                });
+                
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                document.getElementById('loading').textContent = 'Error syncing with origin: ' + error.message;
+            }
+        }
+
+        fetchLedger();
+        setInterval(fetchLedger, 30000);
+    </script>
+</body>
+</html>
