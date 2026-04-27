@@ -21,6 +21,21 @@
             text-transform: uppercase;
             letter-spacing: 2px;
         }
+        .nav {
+            margin-top: 10px;
+            margin-bottom: 30px;
+        }
+        .nav a {
+            color: #0f0;
+            text-decoration: none;
+            border-bottom: 1px dashed #0f0;
+            margin: 0 10px;
+            font-weight: bold;
+        }
+        .nav a:hover {
+            color: #fff;
+            border-bottom: 1px solid #fff;
+        }
         #ledger-container {
             width: 80%;
             max-width: 800px;
@@ -100,6 +115,12 @@
 <body>
 
     <h1>Canvas of Truth</h1>
+    
+    <div class="nav">
+        <a href="index.html">The Canvas</a>
+        <a href="about.html">The Philosophy</a>
+    </div>
+
     <p>This is a read-only manifestation of an immutable ledger. The underlying data exists elsewhere.</p>
 
     <div id="input-section">
