@@ -186,6 +186,8 @@
         let dragMoved = false;
         let dragStartX = 0;
         let dragStartY = 0;
+        let initialPinchDistance = null;
+        let initialPinchZoom = null;
 
         function extractHash(body) {
             const match = body.match(/Hash:\s*([a-f0-9]{64})/i);
@@ -494,6 +496,62 @@
 
             updateHover(event.clientX, event.clientY);
         });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+
+            if (e.touches.length === 1) {
+                isDragging = true;
+                dragMoved = false;
+                dragStartX = e.touches[0].clientX;
+                dragStartY = e.touches[0].clientY;
+                hoveredMark = null;
+                hideTooltip();
+            }
+
+            if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const distance = Math.hypot(dx, dy);
+                initialPinchDistance = distance;
+                initialPinchZoom = camera.zoomLevel;
+                isDragging = false;
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+
+            if (e.touches.length === 1 && isDragging) {
+                const dx = e.touches[0].clientX - dragStartX;
+                const dy = e.touches[0].clientY - dragStartY;
+                dragMoved = true;
+                camera.offsetX -= dx / camera.zoomLevel;
+                camera.offsetY -= dy / camera.zoomLevel;
+                dragStartX = e.touches[0].clientX;
+                dragStartY = e.touches[0].clientY;
+            }
+
+            if (e.touches.length === 2 && initialPinchDistance !== null) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const newDistance = Math.hypot(dx, dy);
+                const zoomFactor = newDistance / initialPinchDistance;
+                const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, initialPinchZoom * zoomFactor));
+                camera.zoomLevel = nextZoom;
+            }
+        }, { passive: false });
+
+        function onTouchEndOrCancel(e) {
+            initialPinchDistance = null;
+
+            if (e.touches.length === 0) {
+                isDragging = false;
+            }
+        }
+
+        canvas.addEventListener('touchend', onTouchEndOrCancel);
+        canvas.addEventListener('touchcancel', onTouchEndOrCancel);
 
         function endDrag() {
             isDragging = false;
