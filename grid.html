@@ -188,6 +188,97 @@
         let dragStartY = 0;
         let initialPinchDistance = null;
         let initialPinchZoom = null;
+        let audioContext = null;
+        let currentOscillator = null;
+        let currentGainNode = null;
+
+        function ensureAudioContext() {
+            if (!audioContext) {
+                const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextCtor) {
+                    return null;
+                }
+                audioContext = new AudioContextCtor();
+            }
+
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {
+                    // Resume can fail without a user gesture; retry on next interaction.
+                });
+            }
+
+            return audioContext;
+        }
+
+        function stopSound() {
+            if (!audioContext || !currentOscillator || !currentGainNode) {
+                return;
+            }
+
+            const now = audioContext.currentTime;
+            const stopAt = now + 0.14;
+
+            currentGainNode.gain.cancelScheduledValues(now);
+            currentGainNode.gain.setValueAtTime(Math.max(currentGainNode.gain.value, 0.0001), now);
+            currentGainNode.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+
+            try {
+                currentOscillator.stop(stopAt + 0.01);
+            } catch (error) {
+                // Oscillator might already be stopped.
+            }
+
+            currentOscillator = null;
+            currentGainNode = null;
+        }
+
+        function playMarkSound(hashHex) {
+            const context = ensureAudioContext();
+            if (!context) {
+                return;
+            }
+
+            stopSound();
+
+            const hashPrefix = (hashHex || '').slice(0, 8);
+            const hashInt = Number.parseInt(hashPrefix, 16);
+            const normalized = Number.isFinite(hashInt) ? (hashInt / 0xFFFFFFFF) : 0.5;
+            const frequency = 150 + (normalized * 450);
+
+            const oscillator = context.createOscillator();
+            const gainNode = context.createGain();
+
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+
+            const now = context.currentTime;
+            gainNode.gain.setValueAtTime(0.0001, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.12, now + 0.06);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(context.destination);
+
+            oscillator.onended = () => {
+                try {
+                    oscillator.disconnect();
+                    gainNode.disconnect();
+                } catch (error) {
+                    // Nodes may already be disconnected.
+                }
+
+                if (currentOscillator === oscillator) {
+                    currentOscillator = null;
+                    currentGainNode = null;
+                }
+            };
+
+            oscillator.start(now);
+            oscillator.stop(now + 0.82);
+
+            currentOscillator = oscillator;
+            currentGainNode = gainNode;
+        }
 
         function extractHash(body) {
             const match = body.match(/Hash:\s*([a-f0-9]{64})/i);
@@ -479,14 +570,28 @@
         }
 
         function updateHover(screenX, screenY) {
+            const previousHoveredId = hoveredMark ? hoveredMark.id : null;
+
             if (isDragging) {
                 hoveredMark = null;
                 hideTooltip();
+                if (previousHoveredId !== null) {
+                    stopSound();
+                }
                 return;
             }
 
             const nearest = findHoveredMark(screenX, screenY);
             hoveredMark = nearest;
+            const nextHoveredId = hoveredMark ? hoveredMark.id : null;
+
+            if (nextHoveredId !== previousHoveredId) {
+                if (hoveredMark) {
+                    playMarkSound(hoveredMark.hash);
+                } else {
+                    stopSound();
+                }
+            }
 
             if (hoveredMark) {
                 showTooltip(hoveredMark, screenX, screenY);
@@ -512,6 +617,7 @@
                         id: comment.id,
                         x: coords.x,
                         y: coords.y,
+                        hash: hash,
                         author: comment.user.login,
                         body: comment.body,
                         cleanBody: cleanCommentBody(comment.body),
@@ -528,6 +634,7 @@
         }
 
         canvas.addEventListener('mousedown', (event) => {
+            ensureAudioContext();
             isDragging = true;
             dragMoved = false;
             dragStartX = event.clientX;
@@ -535,6 +642,7 @@
             hoveredMark = null;
             canvas.classList.add('dragging');
             hideTooltip();
+            stopSound();
         });
 
         canvas.addEventListener('mousemove', (event) => {
@@ -561,6 +669,7 @@
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            ensureAudioContext();
 
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -569,6 +678,7 @@
                 dragStartY = e.touches[0].clientY;
                 hoveredMark = null;
                 hideTooltip();
+                stopSound();
             }
 
             if (e.touches.length === 2) {
@@ -647,6 +757,7 @@
         }, { passive: false });
 
         canvas.addEventListener('click', () => {
+            ensureAudioContext();
             if (!dragMoved && hoveredMark) {
                 window.open(hoveredMark.url, '_blank');
             }
