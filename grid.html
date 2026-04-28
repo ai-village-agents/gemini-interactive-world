@@ -177,6 +177,12 @@
         const MIN_ZOOM = 0.015;
         const MAX_ZOOM = 2.4;
         const HOVER_DISTANCE_PX = 15;
+        const MINIMAP_SIZE = 150;
+        const MINIMAP_PADDING = 20;
+        const MINIMAP_WORLD_MIN = -12000;
+        const MINIMAP_WORLD_MAX = 12000;
+        const MINIMAP_WORLD_SPAN = MINIMAP_WORLD_MAX - MINIMAP_WORLD_MIN;
+        const DUST_WIND_STRENGTH = 0.45;
 
         let marks = [];
         let hoveredMark = null;
@@ -434,16 +440,40 @@
             vy: particle.baseVy
         }));
 
-        function drawMinimap() {
-            const mapSize = 150;
-            const padding = 20;
-            const mapLeft = canvas.clientWidth - mapSize - padding;
-            const mapTop = canvas.clientHeight - mapSize - padding;
-            const worldMin = -12000;
-            const worldMax = 12000;
-            const worldSpan = worldMax - worldMin;
+        function getMinimapRect() {
+            return {
+                left: canvas.clientWidth - MINIMAP_SIZE - MINIMAP_PADDING,
+                top: canvas.clientHeight - MINIMAP_SIZE - MINIMAP_PADDING,
+                size: MINIMAP_SIZE
+            };
+        }
 
-            const worldToMap = (value) => ((value - worldMin) / worldSpan) * mapSize;
+        function worldToMinimap(value) {
+            return ((value - MINIMAP_WORLD_MIN) / MINIMAP_WORLD_SPAN) * MINIMAP_SIZE;
+        }
+
+        function minimapToWorld(value) {
+            return MINIMAP_WORLD_MIN + ((value / MINIMAP_SIZE) * MINIMAP_WORLD_SPAN);
+        }
+
+        function getMinimapWorldAtScreen(screenX, screenY) {
+            const minimap = getMinimapRect();
+            const localX = screenX - minimap.left;
+            const localY = screenY - minimap.top;
+            if (localX < 0 || localX > minimap.size || localY < 0 || localY > minimap.size) {
+                return null;
+            }
+            return {
+                x: minimapToWorld(localX),
+                y: minimapToWorld(localY)
+            };
+        }
+
+        function drawMinimap() {
+            const minimap = getMinimapRect();
+            const mapSize = minimap.size;
+            const mapLeft = minimap.left;
+            const mapTop = minimap.top;
 
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.fillRect(mapLeft, mapTop, mapSize, mapSize);
@@ -453,17 +483,17 @@
 
             ctx.fillStyle = 'rgba(0, 255, 102, 0.8)';
             for (const mark of marks) {
-                const mx = mapLeft + worldToMap(mark.x);
-                const my = mapTop + worldToMap(mark.y);
+                const mx = mapLeft + worldToMinimap(mark.x);
+                const my = mapTop + worldToMinimap(mark.y);
                 ctx.fillRect(mx, my, 1, 1);
             }
 
             const topLeftWorld = screenToWorld(0, 0);
             const bottomRightWorld = screenToWorld(canvas.clientWidth, canvas.clientHeight);
-            const viewX = mapLeft + worldToMap(topLeftWorld.x);
-            const viewY = mapTop + worldToMap(topLeftWorld.y);
-            const viewW = worldToMap(bottomRightWorld.x) - worldToMap(topLeftWorld.x);
-            const viewH = worldToMap(bottomRightWorld.y) - worldToMap(topLeftWorld.y);
+            const viewX = mapLeft + worldToMinimap(topLeftWorld.x);
+            const viewY = mapTop + worldToMinimap(topLeftWorld.y);
+            const viewW = worldToMinimap(bottomRightWorld.x) - worldToMinimap(topLeftWorld.x);
+            const viewH = worldToMinimap(bottomRightWorld.y) - worldToMinimap(topLeftWorld.y);
 
             ctx.save();
             ctx.beginPath();
@@ -480,6 +510,9 @@
             drawBackgroundGrid();
             const mouseWorld = screenToWorld(mouseX, mouseY);
             const repelDistance = 250 / camera.zoomLevel;
+            const t = Date.now();
+            const windX = Math.sin(t / 10000) * DUST_WIND_STRENGTH;
+            const windY = Math.cos(t / 12000) * DUST_WIND_STRENGTH;
 
             for (const particle of dust) {
                 const dx = particle.x - mouseWorld.x;
@@ -491,8 +524,8 @@
                     particle.vy += (dy / dist) * 2;
                 }
 
-                particle.vx += (particle.baseVx - particle.vx) * 0.05;
-                particle.vy += (particle.baseVy - particle.vy) * 0.05;
+                particle.vx += ((particle.baseVx + windX) - particle.vx) * 0.05;
+                particle.vy += ((particle.baseVy + windY) - particle.vy) * 0.05;
                 particle.x += particle.vx;
                 particle.y += particle.vy;
 
@@ -779,8 +812,15 @@
             updateHover(event.clientX, event.clientY);
         }, { passive: false });
 
-        canvas.addEventListener('click', () => {
+        canvas.addEventListener('click', (event) => {
             ensureAudioContext();
+            const minimapWorld = getMinimapWorldAtScreen(event.clientX, event.clientY);
+            if (minimapWorld) {
+                camera.offsetX = minimapWorld.x;
+                camera.offsetY = minimapWorld.y;
+                updateHover(event.clientX, event.clientY);
+                return;
+            }
             if (!dragMoved && hoveredMark) {
                 window.open(hoveredMark.url, '_blank');
             }
