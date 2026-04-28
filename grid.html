@@ -230,7 +230,6 @@
             canvas.style.height = height + 'px';
 
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            draw();
         }
 
         function worldToScreen(worldX, worldY) {
@@ -311,9 +310,54 @@
             ctx.fill();
         }
 
-        function draw() {
+        const dust = Array.from({ length: 300 }, () => ({
+            x: (Math.random() * 50000) - 25000,
+            y: (Math.random() * 50000) - 25000,
+            vx: (Math.random() * 6) - 3,
+            vy: (Math.random() * 6) - 3,
+            size: 0.5 + (Math.random() * 2),
+            opacity: 0.1 + (Math.random() * 0.4)
+        }));
+
+        function render() {
             ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
             drawBackgroundGrid();
+
+            for (const particle of dust) {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+
+                if (particle.x > 25000) particle.x = -25000;
+                if (particle.x < -25000) particle.x = 25000;
+                if (particle.y > 25000) particle.y = -25000;
+                if (particle.y < -25000) particle.y = 25000;
+
+                const s = worldToScreen(particle.x, particle.y);
+                ctx.fillStyle = `rgba(0, 255, 102, ${particle.opacity})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            for (let i = 0; i < marks.length; i += 1) {
+                for (let j = i + 1; j < marks.length; j += 1) {
+                    const dx = marks[i].x - marks[j].x;
+                    const dy = marks[i].y - marks[j].y;
+                    const distance = Math.hypot(dx, dy);
+
+                    if (distance < 9000) {
+                        const a = worldToScreen(marks[i].x, marks[i].y);
+                        const b = worldToScreen(marks[j].x, marks[j].y);
+                        const alpha = (1 - (distance / 9000)) * 0.45;
+                        ctx.strokeStyle = `rgba(0, 255, 102, ${alpha})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(a.x, a.y);
+                        ctx.lineTo(b.x, b.y);
+                        ctx.stroke();
+                    }
+                }
+            }
 
             for (const mark of marks) {
                 drawNode(mark, hoveredMark && hoveredMark.id === mark.id);
@@ -374,12 +418,10 @@
             if (isDragging) {
                 hoveredMark = null;
                 hideTooltip();
-                draw();
                 return;
             }
 
             const nearest = findHoveredMark(screenX, screenY);
-            const changed = (!nearest && hoveredMark) || (nearest && (!hoveredMark || nearest.id !== hoveredMark.id));
             hoveredMark = nearest;
 
             if (hoveredMark) {
@@ -388,10 +430,6 @@
             } else {
                 hideTooltip();
                 canvas.style.cursor = 'grab';
-            }
-
-            if (changed) {
-                draw();
             }
         }
 
@@ -419,7 +457,6 @@
 
                 loadingEl.style.display = 'none';
                 updateHover(mouseX, mouseY);
-                draw();
             } catch (error) {
                 loadingEl.style.display = 'block';
                 loadingEl.textContent = 'Error syncing with origin: ' + error.message;
@@ -434,7 +471,6 @@
             hoveredMark = null;
             canvas.classList.add('dragging');
             hideTooltip();
-            draw();
         });
 
         canvas.addEventListener('mousemove', (event) => {
@@ -453,8 +489,6 @@
                 camera.offsetY -= dy / camera.zoomLevel;
                 dragStartX = event.clientX;
                 dragStartY = event.clientY;
-
-                draw();
                 return;
             }
 
@@ -490,7 +524,6 @@
             camera.offsetY += mouseBefore.y - mouseAfter.y;
 
             updateHover(event.clientX, event.clientY);
-            draw();
         }, { passive: false });
 
         canvas.addEventListener('click', () => {
@@ -501,7 +534,13 @@
 
         window.addEventListener('resize', resizeCanvas);
 
+        function animate() {
+            render();
+            requestAnimationFrame(animate);
+        }
+
         resizeCanvas();
+        requestAnimationFrame(animate);
         fetchLedger();
         setInterval(fetchLedger, 30000);
     </script>
