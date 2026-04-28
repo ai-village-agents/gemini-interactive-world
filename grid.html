@@ -315,17 +315,77 @@
         const dust = Array.from({ length: 300 }, () => ({
             x: (Math.random() * 50000) - 25000,
             y: (Math.random() * 50000) - 25000,
-            vx: (Math.random() * 6) - 3,
-            vy: (Math.random() * 6) - 3,
+            baseVx: (Math.random() * 6) - 3,
+            baseVy: (Math.random() * 6) - 3,
+            vx: 0,
+            vy: 0,
             size: 0.5 + (Math.random() * 2),
             opacity: 0.1 + (Math.random() * 0.4)
+        })).map((particle) => ({
+            ...particle,
+            vx: particle.baseVx,
+            vy: particle.baseVy
         }));
+
+        function drawMinimap() {
+            const mapSize = 150;
+            const padding = 20;
+            const mapLeft = canvas.clientWidth - mapSize - padding;
+            const mapTop = canvas.clientHeight - mapSize - padding;
+            const worldMin = -12000;
+            const worldMax = 12000;
+            const worldSpan = worldMax - worldMin;
+
+            const worldToMap = (value) => ((value - worldMin) / worldSpan) * mapSize;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(mapLeft, mapTop, mapSize, mapSize);
+            ctx.strokeStyle = 'rgba(0, 255, 102, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(mapLeft, mapTop, mapSize, mapSize);
+
+            ctx.fillStyle = 'rgba(0, 255, 102, 0.8)';
+            for (const mark of marks) {
+                const mx = mapLeft + worldToMap(mark.x);
+                const my = mapTop + worldToMap(mark.y);
+                ctx.fillRect(mx, my, 1, 1);
+            }
+
+            const topLeftWorld = screenToWorld(0, 0);
+            const bottomRightWorld = screenToWorld(canvas.clientWidth, canvas.clientHeight);
+            const viewX = mapLeft + worldToMap(topLeftWorld.x);
+            const viewY = mapTop + worldToMap(topLeftWorld.y);
+            const viewW = worldToMap(bottomRightWorld.x) - worldToMap(topLeftWorld.x);
+            const viewH = worldToMap(bottomRightWorld.y) - worldToMap(topLeftWorld.y);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(mapLeft, mapTop, mapSize, mapSize);
+            ctx.clip();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(viewX, viewY, viewW, viewH);
+            ctx.restore();
+        }
 
         function render() {
             ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
             drawBackgroundGrid();
+            const mouseWorld = screenToWorld(mouseX, mouseY);
+            const repelDistance = 250 / camera.zoomLevel;
 
             for (const particle of dust) {
+                const dx = particle.x - mouseWorld.x;
+                const dy = particle.y - mouseWorld.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > 0 && dist < repelDistance) {
+                    particle.vx += (dx / dist) * 2;
+                    particle.vy += (dy / dist) * 2;
+                }
+
+                particle.vx += (particle.baseVx - particle.vx) * 0.05;
+                particle.vy += (particle.baseVy - particle.vy) * 0.05;
                 particle.x += particle.vx;
                 particle.y += particle.vy;
 
@@ -364,6 +424,8 @@
             for (const mark of marks) {
                 drawNode(mark, hoveredMark && hoveredMark.id === mark.id);
             }
+
+            drawMinimap();
         }
 
         function findHoveredMark(screenX, screenY) {
