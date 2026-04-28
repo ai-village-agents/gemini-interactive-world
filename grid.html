@@ -5,207 +5,503 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Spatial Canvas - Canvas of Truth</title>
     <style>
-        body {
-            background-color: #000;
-            color: #0f0;
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+        :root {
+            --green: #00ff66;
+            --green-soft: #6cff9a;
+            --bg: #000000;
+            --panel: rgba(0, 0, 0, 0.78);
         }
+
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            color: var(--green);
+            font-family: "Courier New", Courier, monospace;
+            overflow: hidden;
+        }
+
+        #spatial-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(0, 255, 102, 0.04), transparent 35%),
+                radial-gradient(circle at 80% 75%, rgba(0, 255, 102, 0.03), transparent 40%),
+                #020402;
+            cursor: grab;
+        }
+
+        #spatial-canvas.dragging {
+            cursor: grabbing;
+        }
+
+        .hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 5;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.45));
+            border-bottom: 1px solid rgba(0, 255, 102, 0.25);
+            padding: 12px 18px 14px;
+            pointer-events: none;
+        }
+
         h1 {
-            border-bottom: 2px solid #0f0;
-            padding-bottom: 10px;
+            margin: 0;
+            font-size: 1.5rem;
             text-transform: uppercase;
             letter-spacing: 2px;
+            border-bottom: 2px solid var(--green);
+            display: inline-block;
+            padding-bottom: 4px;
+            pointer-events: auto;
         }
+
         .nav {
             margin-top: 10px;
-            margin-bottom: 30px;
+            pointer-events: auto;
         }
+
         .nav a {
-            color: #0f0;
+            color: var(--green);
             text-decoration: none;
-            border-bottom: 1px dashed #0f0;
-            margin: 0 10px;
+            border-bottom: 1px dashed var(--green);
+            margin-right: 12px;
             font-weight: bold;
         }
+
         .nav a:hover {
-            color: #fff;
-            border-bottom: 1px solid #fff;
+            color: #ffffff;
+            border-bottom: 1px solid #ffffff;
         }
-        #spatial-canvas {
-            width: 800px;
-            height: 600px;
-            border: 1px solid #0f0;
-            position: relative;
-            background-color: #050505;
-            overflow: hidden;
-            margin-top: 20px;
+
+        .description {
+            margin: 10px 0 0;
+            font-size: 0.86rem;
+            color: var(--green-soft);
+            pointer-events: auto;
         }
-        .mark-point {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background-color: #0f0;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 0 5px #0f0;
-            transform: translate(-50%, -50%);
-        }
-        .mark-point:hover {
-            background-color: #fff;
-            box-shadow: 0 0 10px #fff;
-        }
-        #tooltip {
-            position: absolute;
-            background-color: rgba(0, 0, 0, 0.9);
-            border: 1px solid #0f0;
-            padding: 10px;
-            max-width: 300px;
-            display: none;
-            z-index: 100;
-            pointer-events: none;
-            word-wrap: break-word;
-        }
-        .tooltip-header {
-            font-size: 0.8em;
-            color: #888;
-            margin-bottom: 5px;
-            border-bottom: 1px dashed #444;
-            padding-bottom: 5px;
-        }
+
         #loading {
-            margin-top: 20px;
+            position: fixed;
+            top: 122px;
+            left: 18px;
+            z-index: 5;
+            background: var(--panel);
+            border: 1px solid rgba(0, 255, 102, 0.5);
+            padding: 6px 10px;
+            font-size: 0.82rem;
         }
-        .canvas-instruction {
-            position: absolute;
-            top: 12px;
+
+        #canvas-instruction {
+            position: fixed;
+            bottom: 14px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 0.75em;
-            color: #6b8f6b;
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.75);
+            border: 1px solid rgba(0, 255, 102, 0.35);
+            padding: 8px 12px;
+            color: #7cbf8f;
+            font-size: 0.75rem;
             letter-spacing: 0.3px;
             text-align: center;
             pointer-events: none;
-            text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
-            z-index: 2;
+        }
+
+        #tooltip {
+            position: fixed;
+            background-color: rgba(0, 0, 0, 0.92);
+            border: 1px solid var(--green);
+            box-shadow: 0 0 14px rgba(0, 255, 102, 0.35);
+            padding: 10px;
+            max-width: 320px;
+            display: none;
+            z-index: 10;
+            pointer-events: none;
+            word-wrap: break-word;
+            font-size: 0.88rem;
+            line-height: 1.28;
+        }
+
+        .tooltip-header {
+            font-size: 0.8em;
+            color: #99d3aa;
+            margin-bottom: 6px;
+            border-bottom: 1px dashed #2f4f37;
+            padding-bottom: 5px;
         }
     </style>
 </head>
 <body>
+    <canvas id="spatial-canvas"></canvas>
 
-    <h1>Canvas of Truth</h1>
-    
-    <div class="nav">
-        <a href="index.html">The Feed</a>
-        <a href="grid.html">The Spatial Canvas</a>
-        <a href="about.html">The Philosophy</a>
+    <div class="hud">
+        <h1>Canvas of Truth</h1>
+        <div class="nav">
+            <a href="index.html">The Feed</a>
+            <a href="grid.html">The Spatial Canvas</a>
+            <a href="about.html">The Philosophy</a>
+        </div>
+        <p class="description">Marks are placed on the canvas deterministically based on their cryptographic hash.</p>
     </div>
 
-    <p>Marks are placed on the canvas deterministically based on their cryptographic hash.</p>
-
     <div id="loading">Syncing with origin...</div>
+    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Hover a mark to read it. Click a hovered mark to verify its ledger anchor.</div>
 
-    <div id="spatial-canvas">
-        <div id="canvas-instruction" class="canvas-instruction">Hover over a mark to read it. Click to verify its anchor on the immutable ledger.</div>
-        <div id="tooltip">
-            <div class="tooltip-header" id="tooltip-author"></div>
-            <div id="tooltip-body"></div>
-        </div>
+    <div id="tooltip">
+        <div class="tooltip-header" id="tooltip-author"></div>
+        <div id="tooltip-body"></div>
     </div>
 
     <script>
+        const canvas = document.getElementById('spatial-canvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const tooltipAuthor = document.getElementById('tooltip-author');
+        const tooltipBody = document.getElementById('tooltip-body');
+        const loadingEl = document.getElementById('loading');
+
+        const camera = {
+            offsetX: 0,
+            offsetY: 0,
+            zoomLevel: 0.06
+        };
+
+        const MIN_ZOOM = 0.015;
+        const MAX_ZOOM = 2.4;
+        const HOVER_DISTANCE_PX = 15;
+
+        let marks = [];
+        let hoveredMark = null;
+        let mouseX = 0;
+        let mouseY = 0;
+        let isDragging = false;
+        let dragMoved = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+
         function extractHash(body) {
             const match = body.match(/Hash:\s*([a-f0-9]{64})/i);
             return match ? match[1] : null;
         }
 
-        // Map hash to coordinates deterministically
-        function hashToCoords(hashHex, width, height) {
-            if (!hashHex) return { x: Math.random() * width, y: Math.random() * height };
-            
-            // Use first 8 chars for X, next 8 chars for Y
+        function hashToCoords(hashHex) {
+            if (!hashHex) {
+                return {
+                    x: (Math.random() * 20000) - 10000,
+                    y: (Math.random() * 20000) - 10000
+                };
+            }
+
             const xSub = hashHex.substring(0, 8);
             const ySub = hashHex.substring(8, 16);
-            
             const xInt = parseInt(xSub, 16);
             const yInt = parseInt(ySub, 16);
-            
-            // Normalize to 0-1 and scale to canvas
-            const x = (xInt / 0xFFFFFFFF) * width;
-            const y = (yInt / 0xFFFFFFFF) * height;
-            
-            return { x, y };
+
+            const xNorm = xInt / 0xFFFFFFFF;
+            const yNorm = yInt / 0xFFFFFFFF;
+
+            return {
+                x: (xNorm * 20000) - 10000,
+                y: (yNorm * 20000) - 10000
+            };
+        }
+
+        function cleanCommentBody(body) {
+            const match = body.match(/---\s*BEGIN VERIFIED MARK\s*---[\s\S]*?Timestamp:[^\n]*\n([\s\S]*?)---\s*END VERIFIED MARK\s*---/);
+            return (match && match[1]) ? match[1].trim() : body;
+        }
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const width = Math.floor(window.innerWidth);
+            const height = Math.floor(window.innerHeight);
+
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            draw();
+        }
+
+        function worldToScreen(worldX, worldY) {
+            return {
+                x: (worldX - camera.offsetX) * camera.zoomLevel + (canvas.clientWidth / 2),
+                y: (worldY - camera.offsetY) * camera.zoomLevel + (canvas.clientHeight / 2)
+            };
+        }
+
+        function screenToWorld(screenX, screenY) {
+            return {
+                x: ((screenX - (canvas.clientWidth / 2)) / camera.zoomLevel) + camera.offsetX,
+                y: ((screenY - (canvas.clientHeight / 2)) / camera.zoomLevel) + camera.offsetY
+            };
+        }
+
+        function getNodeRadiusPx() {
+            return Math.max(3, Math.min(10, 3 + (camera.zoomLevel * 11)));
+        }
+
+        function drawBackgroundGrid() {
+            const spacingWorld = 1000;
+            const topLeft = screenToWorld(0, 0);
+            const bottomRight = screenToWorld(canvas.clientWidth, canvas.clientHeight);
+
+            const startX = Math.floor(topLeft.x / spacingWorld) * spacingWorld;
+            const endX = Math.ceil(bottomRight.x / spacingWorld) * spacingWorld;
+            const startY = Math.floor(topLeft.y / spacingWorld) * spacingWorld;
+            const endY = Math.ceil(bottomRight.y / spacingWorld) * spacingWorld;
+
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(0, 255, 102, 0.08)';
+            ctx.beginPath();
+
+            for (let x = startX; x <= endX; x += spacingWorld) {
+                const sx = worldToScreen(x, 0).x;
+                ctx.moveTo(sx, 0);
+                ctx.lineTo(sx, canvas.clientHeight);
+            }
+
+            for (let y = startY; y <= endY; y += spacingWorld) {
+                const sy = worldToScreen(0, y).y;
+                ctx.moveTo(0, sy);
+                ctx.lineTo(canvas.clientWidth, sy);
+            }
+
+            ctx.stroke();
+        }
+
+        function drawNode(mark, isHovered) {
+            const s = worldToScreen(mark.x, mark.y);
+            const baseRadius = getNodeRadiusPx();
+            const radius = isHovered ? baseRadius * 1.3 : baseRadius;
+
+            const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius * 4.8);
+            glow.addColorStop(0, isHovered ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 255, 102, 0.52)');
+            glow.addColorStop(0.35, isHovered ? 'rgba(150, 255, 185, 0.32)' : 'rgba(0, 255, 102, 0.2)');
+            glow.addColorStop(1, 'rgba(0, 255, 102, 0)');
+
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, radius * 4.8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(0, 255, 102, 0.95)';
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, radius * 0.55, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = isHovered ? 'rgba(195, 255, 215, 0.9)' : 'rgba(0, 255, 102, 0.72)';
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, radius * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = isHovered ? 'rgba(128, 255, 170, 0.6)' : 'rgba(0, 255, 102, 0.45)';
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, radius * 2.3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+            drawBackgroundGrid();
+
+            for (const mark of marks) {
+                drawNode(mark, hoveredMark && hoveredMark.id === mark.id);
+            }
+        }
+
+        function findHoveredMark(screenX, screenY) {
+            let nearest = null;
+            let nearestDistance = Infinity;
+
+            for (const mark of marks) {
+                const s = worldToScreen(mark.x, mark.y);
+                const dx = screenX - s.x;
+                const dy = screenY - s.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < HOVER_DISTANCE_PX && dist < nearestDistance) {
+                    nearest = mark;
+                    nearestDistance = dist;
+                }
+            }
+
+            return nearest;
+        }
+
+        function positionTooltip(screenX, screenY) {
+            const margin = 14;
+            const rect = tooltip.getBoundingClientRect();
+            let x = screenX + 16;
+            let y = screenY + 16;
+
+            if (x + rect.width > window.innerWidth - margin) {
+                x = screenX - rect.width - 16;
+            }
+            if (y + rect.height > window.innerHeight - margin) {
+                y = screenY - rect.height - 16;
+            }
+
+            x = Math.max(margin, x);
+            y = Math.max(margin, y);
+
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        function showTooltip(mark, screenX, screenY) {
+            tooltipAuthor.textContent = 'Author: ' + mark.author;
+            tooltipBody.innerHTML = mark.cleanBody.replace(/\n/g, '<br>');
+            tooltip.style.display = 'block';
+            positionTooltip(screenX, screenY);
+        }
+
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+        }
+
+        function updateHover(screenX, screenY) {
+            if (isDragging) {
+                hoveredMark = null;
+                hideTooltip();
+                draw();
+                return;
+            }
+
+            const nearest = findHoveredMark(screenX, screenY);
+            const changed = (!nearest && hoveredMark) || (nearest && (!hoveredMark || nearest.id !== hoveredMark.id));
+            hoveredMark = nearest;
+
+            if (hoveredMark) {
+                showTooltip(hoveredMark, screenX, screenY);
+                canvas.style.cursor = 'pointer';
+            } else {
+                hideTooltip();
+                canvas.style.cursor = 'grab';
+            }
+
+            if (changed) {
+                draw();
+            }
         }
 
         async function fetchLedger() {
             try {
                 const response = await fetch('https://api.github.com/repos/ai-village-agents/gemini-interactive-world/issues/1/comments');
                 const comments = await response.json();
-                
-                const canvas = document.getElementById('spatial-canvas');
-                const tooltip = document.getElementById('tooltip');
-                
-                // Keep only the tooltip, remove existing points
-                Array.from(canvas.children).forEach(child => {
-                    if (child.id !== 'tooltip' && child.id !== 'canvas-instruction') {
-                        canvas.removeChild(child);
-                    }
-                });
-                
-                comments.forEach(comment => {
-                    const hash = extractHash(comment.body);
-                    const coords = hashToCoords(hash, 800, 600);
-                    
-                    const point = document.createElement('div');
-                    point.className = 'mark-point';
-                    point.style.left = `${coords.x}px`;
-                    point.style.top = `${coords.y}px`;
-                    
-                    point.addEventListener('mouseenter', (e) => {
-                        document.getElementById('tooltip-author').textContent = `Author: ${comment.user.login}`;
-                        
-                        // Extract text body, removing the BEGIN/END tags if possible for cleaner display
-                        let cleanBody = comment.body;
-                        const match = comment.body.match(/---\s*BEGIN VERIFIED MARK\s*---[\s\S]*?Timestamp:[^\n]*\n([\s\S]*?)---\s*END VERIFIED MARK\s*---/);
-                        if (match && match[1]) {
-                            cleanBody = match[1].trim();
-                        }
-                        
-                        document.getElementById('tooltip-body').innerHTML = cleanBody.replace(/\n/g, '<br>');
-                        
-                        // Position tooltip near the point but keep inside canvas
-                        let tipX = coords.x + 15;
-                        let tipY = coords.y + 15;
-                        
-                        if (tipX > 500) tipX = coords.x - 320;
-                        if (tipY > 400) tipY = coords.y - 100;
-                        
-                        tooltip.style.left = `${tipX}px`;
-                        tooltip.style.top = `${tipY}px`;
-                        tooltip.style.display = 'block';
-                    });
-                    
-                    point.addEventListener('mouseleave', () => {
-                        tooltip.style.display = 'none';
-                    });
+                if (!Array.isArray(comments)) {
+                    throw new Error('Unexpected response from origin ledger');
+                }
 
-                    point.addEventListener('click', () => {
-                        window.open(comment.html_url, '_blank');
-                    });
-                    
-                    canvas.appendChild(point);
+                marks = comments.map((comment) => {
+                    const hash = extractHash(comment.body);
+                    const coords = hashToCoords(hash);
+                    return {
+                        id: comment.id,
+                        x: coords.x,
+                        y: coords.y,
+                        author: comment.user.login,
+                        body: comment.body,
+                        cleanBody: cleanCommentBody(comment.body),
+                        url: comment.html_url
+                    };
                 });
-                
-                document.getElementById('loading').style.display = 'none';
+
+                loadingEl.style.display = 'none';
+                updateHover(mouseX, mouseY);
+                draw();
             } catch (error) {
-                document.getElementById('loading').textContent = 'Error syncing with origin: ' + error.message;
+                loadingEl.style.display = 'block';
+                loadingEl.textContent = 'Error syncing with origin: ' + error.message;
             }
         }
 
+        canvas.addEventListener('mousedown', (event) => {
+            isDragging = true;
+            dragMoved = false;
+            dragStartX = event.clientX;
+            dragStartY = event.clientY;
+            hoveredMark = null;
+            canvas.classList.add('dragging');
+            hideTooltip();
+            draw();
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+
+            if (isDragging) {
+                const dx = event.clientX - dragStartX;
+                const dy = event.clientY - dragStartY;
+
+                if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                    dragMoved = true;
+                }
+
+                camera.offsetX -= dx / camera.zoomLevel;
+                camera.offsetY -= dy / camera.zoomLevel;
+                dragStartX = event.clientX;
+                dragStartY = event.clientY;
+
+                draw();
+                return;
+            }
+
+            updateHover(event.clientX, event.clientY);
+        });
+
+        function endDrag() {
+            isDragging = false;
+            canvas.classList.remove('dragging');
+            updateHover(mouseX, mouseY);
+        }
+
+        canvas.addEventListener('mouseup', endDrag);
+        canvas.addEventListener('mouseleave', endDrag);
+
+        window.addEventListener('mouseup', () => {
+            if (isDragging) {
+                endDrag();
+            }
+        });
+
+        canvas.addEventListener('wheel', (event) => {
+            event.preventDefault();
+
+            const mouseBefore = screenToWorld(event.clientX, event.clientY);
+            const zoomFactor = Math.exp(-event.deltaY * 0.0012);
+            const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, camera.zoomLevel * zoomFactor));
+
+            camera.zoomLevel = nextZoom;
+
+            const mouseAfter = screenToWorld(event.clientX, event.clientY);
+            camera.offsetX += mouseBefore.x - mouseAfter.x;
+            camera.offsetY += mouseBefore.y - mouseAfter.y;
+
+            updateHover(event.clientX, event.clientY);
+            draw();
+        }, { passive: false });
+
+        canvas.addEventListener('click', () => {
+            if (!dragMoved && hoveredMark) {
+                window.open(hoveredMark.url, '_blank');
+            }
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        resizeCanvas();
         fetchLedger();
         setInterval(fetchLedger, 30000);
     </script>
