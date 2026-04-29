@@ -449,7 +449,7 @@
             currentGainNode = null;
         }
 
-        function playMarkSound(hashHex) {
+        function playMarkSound(hashHex, screenX) {
             const context = ensureAudioContext();
             if (!context) {
                 return;
@@ -468,13 +468,18 @@
             oscillator.type = 'triangle';
             oscillator.frequency.setValueAtTime(frequency, context.currentTime);
 
+            const panner = context.createStereoPanner();
+            const panX = ((screenX || (window.innerWidth / 2)) / window.innerWidth) * 2 - 1;
+            panner.pan.value = Math.max(-1, Math.min(1, panX));
             const now = context.currentTime;
             gainNode.gain.setValueAtTime(0.0001, now);
             gainNode.gain.exponentialRampToValueAtTime(0.12, now + 0.06);
             gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
 
             oscillator.connect(gainNode);
-            gainNode.connect(context.destination);
+            gainNode.connect(panner);
+            panner.connect(context.destination);
+            
 
             oscillator.onended = () => {
                 try {
@@ -1089,7 +1094,7 @@
 
             if (nextHoveredId !== previousHoveredId) {
                 if (hoveredMark) {
-                    playMarkSound(hoveredMark.hash);
+                    playMarkSound(hoveredMark.hash, screenX);
                     addEventLog(`Discovered Mark: ${hoveredMark.hash.slice(0, 8)} at [${Math.round(hoveredMark.x)}, ${Math.round(hoveredMark.y)}]`);
                 } else {
                     stopSound();
