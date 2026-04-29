@@ -831,6 +831,9 @@
             drawBackgroundGrid();
             const mouseWorld = screenToWorld(mouseX, mouseY);
             const repelDistance = 250 / camera.zoomLevel;
+            const nodeGravityRangeSq = 1500 * 1500;
+            const nodeGravityStrength = 100;
+            const nodesLen = marks.length;
             const t = Date.now();
             const windX = Math.sin(t / 10000) * DUST_WIND_STRENGTH;
             const windY = Math.cos(t / 12000) * DUST_WIND_STRENGTH;
@@ -843,6 +846,20 @@
                 if (dist > 0 && dist < repelDistance) {
                     particle.vx += (dx / dist) * 2;
                     particle.vy += (dy / dist) * 2;
+                }
+
+                for (let i = 0; i < nodesLen; i++) {
+                    const node = marks[i];
+                    const ndx = node.x - particle.x;
+                    const ndy = node.y - particle.y;
+                    const nodeDistSq = (ndx * ndx) + (ndy * ndy);
+
+                    if (nodeDistSq > 1 && nodeDistSq < nodeGravityRangeSq) {
+                        const nodeDist = Math.sqrt(nodeDistSq);
+                        const force = nodeGravityStrength / nodeDistSq;
+                        particle.vx += (ndx / nodeDist) * force;
+                        particle.vy += (ndy / nodeDist) * force;
+                    }
                 }
 
                 particle.vx += ((particle.baseVx + windX) - particle.vx) * 0.05;
