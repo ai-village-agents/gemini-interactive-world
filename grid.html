@@ -348,6 +348,11 @@
         let hyperspaceFlashAlpha = 0;
         const WAVE_SPEED = 250;
         const WAVE_MAX_RADIUS = 15000;
+        const WORMHOLE_MIN_HASH_LENGTH = 64;
+        const WORMHOLE_CLICK_DISTANCE_PX = 10;
+        const WORMHOLE_PAN_DURATION_MS = 1800;
+        let activeWormholes = [];
+        let cameraPanAnimation = null;
 
         function addEventLog(message) {
             const item = document.createElement('div');
@@ -617,6 +622,122 @@
             ctx.stroke();
         }
 
+        function hasEligibleWormholeHash(mark) {
+            return Boolean(mark && typeof mark.hash === 'string' && mark.hash.length >= WORMHOLE_MIN_HASH_LENGTH);
+        }
+
+        function buildWormholes() {
+            const wormholes = [];
+            for (let i = 0; i < marks.length; i++) {
+                const a = marks[i];
+                if (!hasEligibleWormholeHash(a)) {
+                    continue;
+                }
+                for (let j = i + 1; j < marks.length; j++) {
+                    const b = marks[j];
+                    if (!hasEligibleWormholeHash(b)) {
+                        continue;
+                    }
+                    if (a.hash.slice(0, 2) === b.hash.slice(0, 2)) {
+                        wormholes.push({ source: a, target: b });
+                    }
+                }
+            }
+            return wormholes;
+        }
+
+        function drawWormholes() {
+            activeWormholes = buildWormholes();
+            if (activeWormholes.length === 0) {
+                return;
+            }
+
+            const now = Date.now();
+            const dashShift = -((now * 0.03) % 28);
+            const pulse = (Math.sin(now * 0.004) + 1) * 0.5;
+            const alpha = 0.14 + (pulse * 0.2);
+
+            ctx.save();
+            ctx.setLineDash([8, 6]);
+            ctx.lineDashOffset = dashShift;
+            ctx.lineWidth = 1.6;
+            ctx.shadowColor = `rgba(140, 255, 220, ${alpha})`;
+            ctx.shadowBlur = 8;
+
+            for (const wormhole of activeWormholes) {
+                const a = worldToScreen(wormhole.source.x, wormhole.source.y);
+                const b = worldToScreen(wormhole.target.x, wormhole.target.y);
+                ctx.strokeStyle = `rgba(140, 255, 220, ${alpha})`;
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const lenSq = (dx * dx) + (dy * dy);
+            if (lenSq === 0) {
+                return Math.hypot(px - x1, py - y1);
+            }
+            const t = Math.max(0, Math.min(1, (((px - x1) * dx) + ((py - y1) * dy)) / lenSq));
+            const projX = x1 + (t * dx);
+            const projY = y1 + (t * dy);
+            return Math.hypot(px - projX, py - projY);
+        }
+
+        function findWormholeAtScreenPoint(screenX, screenY) {
+            for (const wormhole of activeWormholes) {
+                const a = worldToScreen(wormhole.source.x, wormhole.source.y);
+                const b = worldToScreen(wormhole.target.x, wormhole.target.y);
+                const dist = pointToSegmentDistance(screenX, screenY, a.x, a.y, b.x, b.y);
+                if (dist <= WORMHOLE_CLICK_DISTANCE_PX) {
+                    return wormhole;
+                }
+            }
+            return null;
+        }
+
+        function easeInOutCubic(t) {
+            return t < 0.5 ? (4 * t * t * t) : (1 - Math.pow(-2 * t + 2, 3) / 2);
+        }
+
+        function startCameraPan(fromNode, toNode) {
+            if (!fromNode || !toNode) {
+                return;
+            }
+            cameraPanAnimation = {
+                startTime: performance.now(),
+                duration: WORMHOLE_PAN_DURATION_MS,
+                fromX: fromNode.x,
+                fromY: fromNode.y,
+                toX: toNode.x,
+                toY: toNode.y
+            };
+            camera.offsetX = fromNode.x;
+            camera.offsetY = fromNode.y;
+            updateHover(mouseX, mouseY);
+        }
+
+        function updateCameraPanAnimation(now) {
+            if (!cameraPanAnimation) {
+                return;
+            }
+            const elapsed = now - cameraPanAnimation.startTime;
+            const progress = Math.max(0, Math.min(1, elapsed / cameraPanAnimation.duration));
+            const eased = easeInOutCubic(progress);
+            camera.offsetX = cameraPanAnimation.fromX + ((cameraPanAnimation.toX - cameraPanAnimation.fromX) * eased);
+            camera.offsetY = cameraPanAnimation.fromY + ((cameraPanAnimation.toY - cameraPanAnimation.fromY) * eased);
+
+            if (progress >= 1) {
+                cameraPanAnimation = null;
+            }
+            updateHover(mouseX, mouseY);
+        }
+
         function drawNode(mark, isHovered, scanIntensity = 0) {
             const isBlackHole = mark.hash && mark.hash.startsWith("00");
             const s = worldToScreen(mark.x, mark.y);
@@ -753,6 +874,63 @@
             vx: particle.baseVx,
             vy: particle.baseVy
         }));
+        const shootingStars = [];
+
+        function updateAndDrawShootingStars() {
+            if (Math.random() < 0.006) {
+                const speed = 6 + (Math.random() * 6);
+                const angle = (-Math.PI / 4) + ((Math.random() - 0.5) * 0.35);
+                const edgeBias = Math.random();
+                const startX = edgeBias < 0.5
+                    ? (Math.random() * canvas.clientWidth * 0.7)
+                    : (-40 + (Math.random() * 60));
+                const startY = edgeBias < 0.5
+                    ? (-40 + (Math.random() * 60))
+                    : (Math.random() * canvas.clientHeight * 0.55);
+
+                shootingStars.push({
+                    x: startX,
+                    y: startY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 0,
+                    maxLife: 34 + Math.floor(Math.random() * 26),
+                    baseLength: 65 + (Math.random() * 85),
+                    alpha: 0.38 + (Math.random() * 0.35)
+                });
+            }
+
+            const zoomDepth = Math.max(0.65, Math.min(2.2, camera.zoomLevel / 0.06));
+            for (let i = shootingStars.length - 1; i >= 0; i--) {
+                const star = shootingStars[i];
+                star.x += star.vx;
+                star.y += star.vy;
+                star.life += 1;
+
+                const lifeT = star.life / star.maxLife;
+                const fade = Math.max(0, 1 - lifeT);
+                const length = star.baseLength * zoomDepth;
+                const tailX = star.x - (star.vx * length / Math.max(0.1, Math.hypot(star.vx, star.vy)));
+                const tailY = star.y - (star.vy * length / Math.max(0.1, Math.hypot(star.vx, star.vy)));
+
+                const streak = ctx.createLinearGradient(star.x, star.y, tailX, tailY);
+                streak.addColorStop(0, `rgba(230, 255, 245, ${star.alpha * fade})`);
+                streak.addColorStop(0.5, `rgba(165, 255, 210, ${(star.alpha * 0.55) * fade})`);
+                streak.addColorStop(1, 'rgba(0, 255, 150, 0)');
+
+                ctx.strokeStyle = streak;
+                ctx.lineWidth = Math.max(1, 1.1 * zoomDepth);
+                ctx.beginPath();
+                ctx.moveTo(star.x, star.y);
+                ctx.lineTo(tailX, tailY);
+                ctx.stroke();
+
+                const offscreen = star.x > (canvas.clientWidth + 240) || star.y > (canvas.clientHeight + 240);
+                if (star.life >= star.maxLife || offscreen) {
+                    shootingStars.splice(i, 1);
+                }
+            }
+        }
 
         function getMinimapRect() {
             return {
@@ -861,6 +1039,7 @@
             ctx.globalCompositeOperation = 'source-over';
 
             drawBackgroundGrid();
+            updateAndDrawShootingStars();
             const mouseWorld = screenToWorld(mouseX, mouseY);
             const repelDistance = 250 / camera.zoomLevel;
             const defaultNodeGravityRangeSq = 1500 * 1500;
@@ -997,6 +1176,8 @@
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
+
+            drawWormholes();
 
             for (const mark of marks) {
                 let scanIntensity = 0;
@@ -1311,7 +1492,7 @@
             updateHover(event.clientX, event.clientY);
         }, { passive: false });
 
-        canvas.addEventListener('click', (event) => {
+        function handleCanvasClick(event) {
             ensureAudioContext();
             const minimapWorld = getMinimapWorldAtScreen(event.clientX, event.clientY);
             if (minimapWorld) {
@@ -1320,10 +1501,26 @@
                 updateHover(event.clientX, event.clientY);
                 return;
             }
+
+            const wormhole = findWormholeAtScreenPoint(event.clientX, event.clientY);
+            if (wormhole) {
+                const sourceScreen = worldToScreen(wormhole.source.x, wormhole.source.y);
+                const targetScreen = worldToScreen(wormhole.target.x, wormhole.target.y);
+                const sourceDist = Math.hypot(event.clientX - sourceScreen.x, event.clientY - sourceScreen.y);
+                const targetDist = Math.hypot(event.clientX - targetScreen.x, event.clientY - targetScreen.y);
+                const fromNode = sourceDist <= targetDist ? wormhole.source : wormhole.target;
+                const toNode = fromNode === wormhole.source ? wormhole.target : wormhole.source;
+                startCameraPan(fromNode, toNode);
+                addEventLog(`Wormhole transit ${String(fromNode.hash || '').slice(0, 8)} -> ${String(toNode.hash || '').slice(0, 8)}`);
+                return;
+            }
+
             if (!dragMoved && hoveredMark) {
                 openNodePanel(hoveredMark);
             }
-        });
+        }
+
+        canvas.addEventListener('click', handleCanvasClick);
 
         nodePanelClose.addEventListener('click', closeNodePanel);
         nodePanelOverlay.addEventListener('click', (event) => {
@@ -1368,6 +1565,9 @@
         window.addEventListener('resize', resizeCanvas);
 
         function updateCameraFromKeys() {
+            if (cameraPanAnimation) {
+                return;
+            }
             const speed = 15 / camera.zoomLevel;
             let moved = false;
 
@@ -1394,6 +1594,7 @@
         }
 
         function animate() {
+            updateCameraPanAnimation(performance.now());
             updateCameraFromKeys();
             render();
             requestAnimationFrame(animate);
