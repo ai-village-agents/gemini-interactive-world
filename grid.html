@@ -681,6 +681,8 @@
                 return;
             }
 
+            const clusterPrefixes = ['The Silent', 'Obsidian', 'Luminous', 'Crimson', 'Astral', 'Ethereal', 'Veiled'];
+            const clusterNouns = ['Sector', 'Expanse', 'Nebula', 'Cluster', 'Rift', 'Anomaly', 'Abyss'];
             const clusterDistance = 800;
             const clusterDistanceSq = clusterDistance * clusterDistance;
             const visited = new Array(marks.length).fill(false);
@@ -764,6 +766,29 @@
                 ctx.beginPath();
                 ctx.arc(s.x, s.y, screenRadius, 0, Math.PI * 2);
                 ctx.fill();
+
+                const sortedHashes = clusterIndices
+                    .map((idx) => (typeof marks[idx].hash === 'string' ? marks[idx].hash : ''))
+                    .sort();
+                const clusterSeed = sortedHashes.join('');
+                let numericHash = 0;
+                for (let n = 0; n < clusterSeed.length; n++) {
+                    numericHash = ((numericHash * 31) + clusterSeed.charCodeAt(n)) >>> 0;
+                }
+
+                const prefix = clusterPrefixes[numericHash % clusterPrefixes.length];
+                const noun = clusterNouns[Math.floor(numericHash / clusterPrefixes.length) % clusterNouns.length];
+                const clusterName = `${prefix} ${noun}`.toUpperCase();
+
+                ctx.save();
+                ctx.font = '13px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'rgba(200, 230, 255, 0.8)';
+                ctx.shadowColor = 'rgba(200, 230, 255, 0.45)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(clusterName, s.x, s.y - 6);
+                ctx.restore();
             }
         }
 
