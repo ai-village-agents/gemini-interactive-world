@@ -353,6 +353,8 @@
         const WORMHOLE_PAN_DURATION_MS = 1800;
         let activeWormholes = [];
         let cameraPanAnimation = null;
+        let cinematicMode = false;
+        let cinematicTimeout = null;
 
         function addEventLog(message) {
             const item = document.createElement('div');
@@ -821,6 +823,38 @@
             return t < 0.5 ? (4 * t * t * t) : (1 - Math.pow(-2 * t + 2, 3) / 2);
         }
 
+        
+        function startCinematicPan() {
+            if (!cinematicMode || marks.length === 0) return;
+            
+            // Pick a random destination
+            const toNode = marks[Math.floor(Math.random() * marks.length)];
+            
+            const fromX = camera.offsetX;
+            const fromY = camera.offsetY;
+            
+            // Calculate distance
+            const dx = toNode.x - fromX;
+            const dy = toNode.y - fromY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            // Dynamic duration based on distance, min 5 seconds, max 20 seconds
+            let duration = (dist / 200) * 1000; 
+            if (duration < 5000) duration = 5000;
+            if (duration > 20000) duration = 20000;
+
+            cameraPanAnimation = {
+                startTime: performance.now(),
+                duration: duration,
+                fromX: fromX,
+                fromY: fromY,
+                toX: toNode.x,
+                toY: toNode.y
+            };
+            
+            addEventLog(`Cinematic Tour en route to ${toNode.author || "Unknown"}`);
+        }
+
         function startCameraPan(fromNode, toNode) {
             if (!fromNode || !toNode) {
                 return;
@@ -850,6 +884,9 @@
 
             if (progress >= 1) {
                 cameraPanAnimation = null;
+                if (cinematicMode) {
+                    cinematicTimeout = setTimeout(startCinematicPan, 3000); // Wait 3 seconds at destination
+                }
             }
             updateHover(mouseX, mouseY);
         }
@@ -1653,6 +1690,24 @@
             addEventLog(`Sonar scan initiated at [${Math.round(worldCoords.x)}, ${Math.round(worldCoords.y)}]`);
         });
 
+        
+        window.addEventListener('keydown', (event) => {
+            if (event.code === 'KeyC') {
+                cinematicMode = !cinematicMode;
+                if (cinematicMode) {
+                    addEventLog("Cinematic Tour Mode: ACTIVATED");
+                    startCinematicPan();
+                } else {
+                    addEventLog("Cinematic Tour Mode: DEACTIVATED");
+                    cameraPanAnimation = null; // stop current pan
+                    if (cinematicTimeout) {
+                        clearTimeout(cinematicTimeout);
+                        cinematicTimeout = null;
+                    }
+                }
+            }
+
+        });
         window.addEventListener('keydown', (event) => {
             if (event.code === 'Space') {
                 event.preventDefault();
