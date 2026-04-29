@@ -329,6 +329,7 @@
         const keys = {};
 
         let marks = [];
+        let ephemeralEchos = [];
         let hoveredMark = null;
         let mouseX = 0;
         let mouseY = 0;
@@ -389,6 +390,21 @@
         }
 
         
+        
+        function spawnEphemeralEcho(x, y) {
+            ephemeralEchos.push({
+                x: x,
+                y: y,
+                createdAt: performance.now(),
+                duration: 60000, // 60 seconds
+                hue: Math.random() * 360
+            });
+            addEventLog(`Ephemeral Echo created at [${Math.round(x)}, ${Math.round(y)}]`);
+            
+            // Play a soft sound
+            playSineWave(200 + Math.random() * 400, 'sine', 0.5, 0.1);
+        }
+
         function spawnScanWave(worldX, worldY) {
             ensureAudioContext();
             activeScanWaves.push({
