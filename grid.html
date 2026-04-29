@@ -905,6 +905,19 @@
             }
 
             ctx.stroke();
+
+            ctx.fillStyle = 'rgba(0, 255, 102, 0.4)';
+            ctx.font = '10px monospace';
+
+            for (let x = startX; x <= endX; x += spacingWorld) {
+                const sx = worldToScreen(x, 0).x;
+                ctx.fillText(x.toString(), sx + 5, 15);
+            }
+
+            for (let y = startY; y <= endY; y += spacingWorld) {
+                const sy = worldToScreen(0, y).y;
+                ctx.fillText(y.toString(), 5, sy - 5);
+            }
         }
 
         function hasEligibleWormholeHash(mark) {
