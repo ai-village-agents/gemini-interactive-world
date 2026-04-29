@@ -516,6 +516,53 @@
             ctx.fill();
         }
 
+        function drawOriginMarker() {
+            const origin = worldToScreen(0, 0);
+            const t = Date.now() * 0.0025;
+            const pulse = (Math.sin(t * 1.7) + 1) / 2;
+            const baseSize = 12 + (pulse * 5);
+            const ringRadius = 20 + (pulse * 10);
+
+            // Pulsing ring
+            ctx.beginPath();
+            ctx.arc(origin.x, origin.y, ringRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(0, 255, 102, ${0.25 + (pulse * 0.5)})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Crosshair
+            ctx.strokeStyle = 'rgba(180, 255, 210, 0.95)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(origin.x - 18, origin.y);
+            ctx.lineTo(origin.x + 18, origin.y);
+            ctx.moveTo(origin.x, origin.y - 18);
+            ctx.lineTo(origin.x, origin.y + 18);
+            ctx.stroke();
+
+            // Hollow spinning diamond
+            ctx.save();
+            ctx.translate(origin.x, origin.y);
+            ctx.rotate(t);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -baseSize);
+            ctx.lineTo(baseSize, 0);
+            ctx.lineTo(0, baseSize);
+            ctx.lineTo(-baseSize, 0);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+
+            // Label
+            ctx.fillStyle = 'rgba(205, 255, 220, 0.95)';
+            ctx.font = 'bold 12px "Courier New", Courier, monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ORIGIN [0,0]', origin.x + 24, origin.y - 22);
+        }
+
         
         const nebulas = Array.from({ length: 40 }, () => ({
             x: (Math.random() * 40000) - 20000,
@@ -709,6 +756,8 @@
                 ctx.lineTo(b.x, b.y);
                 ctx.stroke();
             }
+
+            drawOriginMarker();
 
             // Spawn and render data packets
             if (edges.length > 0 && Math.random() < 0.15) {
