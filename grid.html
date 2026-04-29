@@ -115,6 +115,109 @@
             pointer-events: none;
         }
 
+        #bookmarks-panel {
+            position: fixed;
+            bottom: 18px;
+            left: 18px;
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid rgba(0, 255, 102, 0.4);
+            padding: 10px;
+            width: 220px;
+            font-size: 0.8rem;
+            pointer-events: auto;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .bookmark-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px dashed rgba(0, 255, 102, 0.2);
+        }
+
+        .bookmark-name {
+            cursor: pointer;
+            color: #7cbf8f;
+            flex-grow: 1;
+        }
+
+        .bookmark-name:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+
+        .bookmark-delete {
+            cursor: pointer;
+            color: #ff5555;
+            padding: 0 4px;
+            font-weight: bold;
+        }
+
+        .bookmark-add-btn {
+            width: 100%;
+            background: transparent;
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 5px;
+            cursor: pointer;
+            margin-top: 8px;
+            font-family: inherit;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .bookmark-add-btn:hover {
+            background: rgba(0, 255, 102, 0.1);
+            color: #fff;
+        }
+
+        #custom-prompt-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(2px);
+        }
+
+        #custom-prompt {
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid var(--green);
+            padding: 20px;
+            width: 300px;
+            text-align: center;
+        }
+
+        #custom-prompt input {
+            width: 90%;
+            background: #000;
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 8px;
+            margin: 10px 0;
+            font-family: inherit;
+        }
+
+        #custom-prompt button {
+            background: #000;
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 6px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            margin: 0 5px;
+        }
+
+        #custom-prompt button:hover {
+            background: rgba(0, 255, 102, 0.2);
+        }
+
         #tooltip {
             position: fixed;
             background-color: rgba(0, 0, 0, 0.92);
@@ -292,6 +395,8 @@
 
     <div id="loading">Syncing with origin...</div>
     <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click to send a sonar ping. Click a mark to verify.</div>
+    <div id="bookmarks-panel"><div style="font-weight:bold; margin-bottom: 8px; border-bottom: 1px solid var(--green); padding-bottom: 4px;">SAVED WAYPOINTS</div><div id="bookmarks-list"></div><button class="bookmark-add-btn" id="bookmark-add">+ Bookmark Current View</button></div>
+    <div id="custom-prompt-overlay"><div id="custom-prompt"><div style="color:var(--green-soft);margin-bottom:10px;">Enter Waypoint Name:</div><input type="text" id="custom-prompt-input" autocomplete="off"><br><button id="custom-prompt-save">Save</button><button id="custom-prompt-cancel">Cancel</button></div></div>
     <div id="event-log"></div>
     <div id="stats-panel">
         <div class="stat-row"><span class="stat-label">Verified Marks:</span><span class="stat-value" id="stat-marks">0</span></div>
@@ -348,6 +453,12 @@
         const nodePanelBody = document.getElementById('node-panel-body');
         const nodePanelUrl = document.getElementById('node-panel-url');
         const nodePanelClose = document.getElementById('node-panel-close');
+        const bookmarksListEl = document.getElementById('bookmarks-list');
+        const bookmarkAddBtn = document.getElementById('bookmark-add');
+        const customPromptOverlay = document.getElementById('custom-prompt-overlay');
+        const customPromptInput = document.getElementById('custom-prompt-input');
+        const customPromptSave = document.getElementById('custom-prompt-save');
+        const customPromptCancel = document.getElementById('custom-prompt-cancel');
 
         const camera = {
             offsetX: 0,
@@ -396,6 +507,67 @@
         let cinematicTimeout = null;
         let globalClusterCount = 0;
         let statsFrameCounter = 0;
+        const BOOKMARKS_STORAGE_KEY = 'spatial-canvas-bookmarks';
+        let bookmarks = [];
+
+        try {
+            const rawBookmarks = localStorage.getItem(BOOKMARKS_STORAGE_KEY);
+            const parsedBookmarks = rawBookmarks ? JSON.parse(rawBookmarks) : [];
+            if (Array.isArray(parsedBookmarks)) {
+                bookmarks = parsedBookmarks.filter((entry) =>
+                    entry &&
+                    typeof entry.name === 'string' &&
+                    Number.isFinite(entry.offsetX) &&
+                    Number.isFinite(entry.offsetY) &&
+                    Number.isFinite(entry.zoomLevel)
+                );
+            }
+        } catch (error) {
+            bookmarks = [];
+        }
+
+        function saveBookmarks() {
+            localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(bookmarks));
+        }
+
+        function renderBookmarks() {
+            if (!bookmarksListEl) {
+                return;
+            }
+
+            bookmarksListEl.innerHTML = '';
+
+            for (let i = 0; i < bookmarks.length; i++) {
+                const bookmark = bookmarks[i];
+                const item = document.createElement('div');
+                item.className = 'bookmark-item';
+
+                const name = document.createElement('span');
+                name.className = 'bookmark-name';
+                name.textContent = bookmark.name;
+                name.addEventListener('click', () => {
+                    camera.offsetX = bookmark.offsetX;
+                    camera.offsetY = bookmark.offsetY;
+                    camera.zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, bookmark.zoomLevel));
+                    addEventLog(`Warped to bookmark "${bookmark.name}"`);
+                    updateHover(mouseX, mouseY);
+                });
+
+                const remove = document.createElement('span');
+                remove.className = 'bookmark-delete';
+                remove.textContent = 'x';
+                remove.title = 'Delete bookmark';
+                remove.addEventListener('click', () => {
+                    bookmarks.splice(i, 1);
+                    saveBookmarks();
+                    renderBookmarks();
+                });
+
+                item.appendChild(name);
+                item.appendChild(remove);
+                bookmarksListEl.appendChild(item);
+            }
+        }
 
         function addEventLog(message) {
             const item = document.createElement('div');
@@ -1775,6 +1947,34 @@
 
         canvas.addEventListener('click', handleCanvasClick);
 
+        bookmarkAddBtn.addEventListener('click', () => {
+            customPromptOverlay.style.display = 'flex';
+            customPromptInput.value = '';
+            customPromptInput.focus();
+        });
+
+        customPromptCancel.addEventListener('click', () => {
+            customPromptOverlay.style.display = 'none';
+        });
+
+        customPromptSave.addEventListener('click', () => {
+            const name = customPromptInput.value.trim();
+            if (!name) {
+                return;
+            }
+
+            bookmarks.push({
+                name: name,
+                offsetX: camera.offsetX,
+                offsetY: camera.offsetY,
+                zoomLevel: camera.zoomLevel
+            });
+            saveBookmarks();
+            renderBookmarks();
+            addEventLog(`Bookmark saved: "${name}"`);
+            customPromptOverlay.style.display = 'none';
+        });
+
         nodePanelClose.addEventListener('click', closeNodePanel);
         nodePanelOverlay.addEventListener('click', (event) => {
             if (event.target === nodePanelOverlay) {
@@ -1899,6 +2099,7 @@
         }
 
         resizeCanvas();
+        renderBookmarks();
         requestAnimationFrame(animate);
         fetchLedger();
         setInterval(fetchLedger, 30000);
