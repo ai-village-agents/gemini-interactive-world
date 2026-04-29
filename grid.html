@@ -254,6 +254,47 @@
             pointer-events: none;
         }
 
+        #warp-panel {
+            position: fixed;
+            top: 148px;
+            right: 18px;
+            z-index: 5;
+            width: 220px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid rgba(0, 255, 102, 0.4);
+            padding: 10px;
+            pointer-events: auto;
+            font-size: 0.8rem;
+        }
+
+        #warp-coords {
+            width: 100%;
+            box-sizing: border-box;
+            background: #000;
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 7px 8px;
+            font-family: inherit;
+            margin-bottom: 8px;
+        }
+
+        #btn-warp {
+            width: 100%;
+            background: transparent;
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        #btn-warp:hover {
+            background: rgba(0, 255, 102, 0.1);
+            color: #fff;
+        }
+
         .stat-row {
             display: flex;
             justify-content: space-between;
@@ -404,6 +445,11 @@
         <div class="stat-row"><span class="stat-label">Wormhole Links:</span><span class="stat-value" id="stat-wormholes">0</span></div>
         <div class="stat-row"><span class="stat-label">Nebula Clusters:</span><span class="stat-value" id="stat-clusters">0</span></div>
     </div>
+    <div id="warp-panel" class="panel">
+        <div style="font-weight:bold; margin-bottom: 8px; border-bottom: 1px solid var(--green); padding-bottom: 4px;">COORDINATE JUMP</div>
+        <input id="warp-coords" type="text" placeholder="X, Y" autocomplete="off">
+        <button id="btn-warp" type="button">INITIATE JUMP</button>
+    </div>
 
     <div id="node-panel-overlay" aria-hidden="true">
         <div id="node-panel" role="dialog" aria-modal="true" aria-labelledby="node-panel-title">
@@ -459,12 +505,17 @@
         const customPromptInput = document.getElementById('custom-prompt-input');
         const customPromptSave = document.getElementById('custom-prompt-save');
         const customPromptCancel = document.getElementById('custom-prompt-cancel');
+        const warpCoordsInput = document.getElementById('warp-coords');
+        const warpButton = document.getElementById('btn-warp');
 
         const camera = {
             offsetX: 0,
             offsetY: 0,
             zoomLevel: 0.06
         };
+        let targetOffsetX = camera.offsetX;
+        let targetOffsetY = camera.offsetY;
+        let targetZoom = camera.zoomLevel;
 
         const MIN_ZOOM = 0.015;
         const MAX_ZOOM = 2.4;
@@ -599,6 +650,10 @@
                     item.remove();
                 }, 260);
             }, 8000);
+        }
+
+        function showNotification(message) {
+            addEventLog(message);
         }
 
         
@@ -1114,6 +1169,9 @@
             const eased = easeInOutCubic(progress);
             camera.offsetX = cameraPanAnimation.fromX + ((cameraPanAnimation.toX - cameraPanAnimation.fromX) * eased);
             camera.offsetY = cameraPanAnimation.fromY + ((cameraPanAnimation.toY - cameraPanAnimation.fromY) * eased);
+            if (Number.isFinite(cameraPanAnimation.fromZoom) && Number.isFinite(cameraPanAnimation.toZoom)) {
+                camera.zoomLevel = cameraPanAnimation.fromZoom + ((cameraPanAnimation.toZoom - cameraPanAnimation.fromZoom) * eased);
+            }
 
             if (progress >= 1) {
                 cameraPanAnimation = null;
@@ -1951,6 +2009,42 @@
             customPromptOverlay.style.display = 'flex';
             customPromptInput.value = '';
             customPromptInput.focus();
+        });
+
+        warpButton.addEventListener('click', () => {
+            if (!warpCoordsInput) {
+                return;
+            }
+            const raw = warpCoordsInput.value.trim();
+            const parts = raw.split(',');
+            if (parts.length !== 2) {
+                showNotification('Invalid coordinates. Use "X, Y"');
+                return;
+            }
+
+            const x = parseFloat(parts[0].trim());
+            const y = parseFloat(parts[1].trim());
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                showNotification('Invalid coordinates. Use "X, Y"');
+                return;
+            }
+
+            targetOffsetX = -x;
+            targetOffsetY = -y;
+            targetZoom = 1;
+
+            cameraPanAnimation = {
+                startTime: performance.now(),
+                duration: 1500,
+                fromX: camera.offsetX,
+                fromY: camera.offsetY,
+                toX: targetOffsetX,
+                toY: targetOffsetY,
+                fromZoom: camera.zoomLevel,
+                toZoom: targetZoom
+            };
+
+            showNotification('Jumping to ' + x + ', ' + y);
         });
 
         customPromptCancel.addEventListener('click', () => {
