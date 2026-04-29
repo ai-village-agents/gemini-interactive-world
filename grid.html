@@ -212,6 +212,8 @@
         let activeScanWaves = [];
         let activePackets = [];
         let edges = [];
+        let parsedData = [];
+        let hyperspaceFlashAlpha = 0;
         const WAVE_SPEED = 250;
         const WAVE_MAX_RADIUS = 15000;
 
@@ -653,6 +655,23 @@
             ctx.restore();
         }
 
+        function triggerHyperspaceJump() {
+            if (!Array.isArray(parsedData) || parsedData.length === 0) {
+                return;
+            }
+
+            const node = parsedData[Math.floor(Math.random() * parsedData.length)];
+            if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y)) {
+                return;
+            }
+
+            camera.offsetX = node.x;
+            camera.offsetY = node.y;
+            hyperspaceFlashAlpha = 0.85;
+            updateHover(mouseX, mouseY);
+            addEventLog(`Hyperspace jump to node ${String(node.hash || '').slice(0, 8)}`);
+        }
+
         function render() {
             ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
             
@@ -824,6 +843,14 @@
             }
 
             drawMinimap();
+
+            if (hyperspaceFlashAlpha > 0.001) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${hyperspaceFlashAlpha})`;
+                ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+                hyperspaceFlashAlpha *= 0.84;
+            } else {
+                hyperspaceFlashAlpha = 0;
+            }
         }
 
         function findHoveredMark(screenX, screenY) {
@@ -934,6 +961,7 @@
                         url: comment.html_url
                     };
                 });
+                parsedData = marks;
 
                 edges = [];
                 for (let i = 0; i < marks.length; i++) {
@@ -1100,6 +1128,12 @@
         });
 
         window.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                event.preventDefault();
+                if (!event.repeat) {
+                    triggerHyperspaceJump();
+                }
+            }
             keys[event.key] = true;
         });
 
