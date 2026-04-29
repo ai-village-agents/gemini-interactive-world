@@ -676,6 +676,97 @@
             ctx.restore();
         }
 
+        function drawClusters() {
+            if (!Array.isArray(marks) || marks.length < 3) {
+                return;
+            }
+
+            const clusterDistance = 800;
+            const clusterDistanceSq = clusterDistance * clusterDistance;
+            const visited = new Array(marks.length).fill(false);
+
+            for (let i = 0; i < marks.length; i++) {
+                if (visited[i]) {
+                    continue;
+                }
+
+                const queue = [i];
+                const clusterIndices = [];
+                visited[i] = true;
+
+                while (queue.length > 0) {
+                    const currentIndex = queue.pop();
+                    const current = marks[currentIndex];
+                    clusterIndices.push(currentIndex);
+
+                    for (let j = 0; j < marks.length; j++) {
+                        if (visited[j]) {
+                            continue;
+                        }
+
+                        const candidate = marks[j];
+                        const dx = current.x - candidate.x;
+                        const dy = current.y - candidate.y;
+                        const distSq = (dx * dx) + (dy * dy);
+                        if (distSq <= clusterDistanceSq) {
+                            visited[j] = true;
+                            queue.push(j);
+                        }
+                    }
+                }
+
+                if (clusterIndices.length < 3) {
+                    continue;
+                }
+
+                let sumX = 0;
+                let sumY = 0;
+                for (const idx of clusterIndices) {
+                    sumX += marks[idx].x;
+                    sumY += marks[idx].y;
+                }
+
+                const centerX = sumX / clusterIndices.length;
+                const centerY = sumY / clusterIndices.length;
+
+                let maxDist = 0;
+                for (const idx of clusterIndices) {
+                    const dx = marks[idx].x - centerX;
+                    const dy = marks[idx].y - centerY;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > maxDist) {
+                        maxDist = dist;
+                    }
+                }
+
+                const worldRadius = Math.max(900, maxDist + 450);
+                const s = worldToScreen(centerX, centerY);
+                const screenRadius = worldRadius * camera.zoomLevel;
+                if (screenRadius < 2) {
+                    continue;
+                }
+
+                if (
+                    s.x + screenRadius < 0 ||
+                    s.x - screenRadius > canvas.clientWidth ||
+                    s.y + screenRadius < 0 ||
+                    s.y - screenRadius > canvas.clientHeight
+                ) {
+                    continue;
+                }
+
+                const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, screenRadius);
+                glow.addColorStop(0, 'rgba(130, 150, 255, 0.06)');
+                glow.addColorStop(0.45, 'rgba(100, 150, 255, 0.04)');
+                glow.addColorStop(1, 'rgba(100, 150, 255, 0)');
+
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, screenRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
         function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
             const dx = x2 - x1;
             const dy = y2 - y1;
@@ -1177,6 +1268,7 @@
                 ctx.shadowBlur = 0;
             }
 
+            drawClusters();
             drawWormholes();
 
             for (const mark of marks) {
