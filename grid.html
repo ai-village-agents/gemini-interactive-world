@@ -435,7 +435,7 @@
     </div>
 
     <div id="loading">Syncing with origin...</div>
-    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click to send a sonar ping. H - Harmonic Sweep. Click a mark to verify.</div>
+    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click to send a sonar ping. H - Harmonic Sweep. L - Link Mode. Click a mark to verify.</div>
     <div id="bookmarks-panel"><div style="font-weight:bold; margin-bottom: 8px; border-bottom: 1px solid var(--green); padding-bottom: 4px;">SAVED WAYPOINTS</div><div id="bookmarks-list"></div><button class="bookmark-add-btn" id="bookmark-add">+ Bookmark Current View</button></div>
     <div id="custom-prompt-overlay"><div id="custom-prompt"><div style="color:var(--green-soft);margin-bottom:10px;">Enter Waypoint Name:</div><input type="text" id="custom-prompt-input" autocomplete="off"><br><button id="custom-prompt-save">Save</button><button id="custom-prompt-cancel">Cancel</button></div></div>
     <div id="event-log"></div>
@@ -444,6 +444,7 @@
         <div class="stat-row"><span class="stat-label">Black Holes:</span><span class="stat-value" id="stat-blackholes">0</span></div>
         <div class="stat-row"><span class="stat-label">Wormhole Links:</span><span class="stat-value" id="stat-wormholes">0</span></div>
         <div class="stat-row"><span class="stat-label">Nebula Clusters:</span><span class="stat-value" id="stat-clusters">0</span></div>
+        <div class="stat-row"><span class="stat-label">Link Mode:</span><span class="stat-value" id="stat-link-mode">INACTIVE</span></div>
     </div>
     <div id="warp-panel" class="panel">
         <div style="font-weight:bold; margin-bottom: 8px; border-bottom: 1px solid var(--green); padding-bottom: 4px;">COORDINATE JUMP</div>
@@ -550,6 +551,8 @@
         let activeResonances = [];
         let activePackets = [];
         let edges = [];
+        let explicitLinks = [];
+        let explicitEdges = [];
         let parsedData = [];
         let hyperspaceFlashAlpha = 0;
         const WAVE_SPEED = 250;
@@ -567,6 +570,9 @@
         let cinematicTimeout = null;
         let globalClusterCount = 0;
         let statsFrameCounter = 0;
+        let isLinkMode = false;
+        let linkSourceMark = null;
+        let suppressNextCanvasClick = false;
         const BOOKMARKS_STORAGE_KEY = 'spatial-canvas-bookmarks';
         let bookmarks = [];
 
@@ -1885,6 +1891,30 @@
                 ctx.stroke();
             }
 
+            for (const edge of explicitEdges) {
+                const a = worldToScreen(edge.source.x, edge.source.y);
+                const b = worldToScreen(edge.target.x, edge.target.y);
+                ctx.strokeStyle = 'hsla(45, 100%, 70%, 0.8)';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+            }
+
+            if (isLinkMode && linkSourceMark) {
+                const from = worldToScreen(linkSourceMark.x, linkSourceMark.y);
+                ctx.save();
+                ctx.setLineDash([8, 6]);
+                ctx.strokeStyle = 'hsla(45, 100%, 70%, 0.9)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(from.x, from.y);
+                ctx.lineTo(mouseX, mouseY);
+                ctx.stroke();
+                ctx.restore();
+            }
+
             drawOriginMarker();
 
             // Spawn and render data packets
@@ -2131,6 +2161,18 @@
                     throw new Error('Unexpected response from origin ledger');
                 }
 
+                explicitLinks = [];
+                const explicitLinkPattern = /Link:\s*([a-f0-9]{64})\s*,\s*([a-f0-9]{64})/ig;
+                for (const comment of comments) {
+                    const body = comment && typeof comment.body === 'string' ? comment.body : '';
+                    explicitLinkPattern.lastIndex = 0;
+                    let match = explicitLinkPattern.exec(body);
+                    while (match) {
+                        explicitLinks.push([match[1].toLowerCase(), match[2].toLowerCase()]);
+                        match = explicitLinkPattern.exec(body);
+                    }
+                }
+
                 marks = comments.map((comment) => {
                     const hash = extractHash(comment.body);
                     const coords = hashToCoords(hash);
@@ -2162,6 +2204,21 @@
                     }
                 }
 
+                explicitEdges = [];
+                const marksByHash = new Map();
+                for (const mark of marks) {
+                    if (mark && typeof mark.hash === 'string') {
+                        marksByHash.set(mark.hash.toLowerCase(), mark);
+                    }
+                }
+                for (const link of explicitLinks) {
+                    const sourceMark = marksByHash.get(link[0]);
+                    const targetMark = marksByHash.get(link[1]);
+                    if (sourceMark && targetMark) {
+                        explicitEdges.push({ source: sourceMark, target: targetMark });
+                    }
+                }
+
                 loadingEl.style.display = 'none';
                 updateHover(mouseX, mouseY);
             } catch (error) {
@@ -2171,6 +2228,21 @@
         }
 
         canvas.addEventListener('mousedown', (event) => {
+            if (isLinkMode && hoveredMark) {
+                suppressNextCanvasClick = true;
+                if (linkSourceMark === null) {
+                    linkSourceMark = hoveredMark;
+                    addEventLog('Link source selected. Click a target mark.');
+                } else if (linkSourceMark !== hoveredMark) {
+                    const sourceHash = String(linkSourceMark.hash || '');
+                    const targetHash = String(hoveredMark.hash || '');
+                    alert('To make this link permanent, post this to the ledger:\n\nLink: ' + sourceHash + ', ' + targetHash);
+                    linkSourceMark = null;
+                    isLinkMode = false;
+                }
+                updateGlobalStats();
+                return;
+            }
             ensureAudioContext();
             isDragging = true;
             dragMoved = false;
@@ -2294,6 +2366,10 @@
         }, { passive: false });
 
         function handleCanvasClick(event) {
+            if (suppressNextCanvasClick) {
+                suppressNextCanvasClick = false;
+                return;
+            }
             ensureAudioContext();
             const minimapWorld = getMinimapWorldAtScreen(event.clientX, event.clientY);
             if (minimapWorld) {
@@ -2425,6 +2501,12 @@
                     spawnHarmonicSweep();
                 }
             }
+            if (event.code === 'KeyL' && !event.repeat) {
+                isLinkMode = !isLinkMode;
+                linkSourceMark = null;
+                addEventLog('Link Mode: ' + (isLinkMode ? 'ACTIVE' : 'INACTIVE'));
+                updateGlobalStats();
+            }
             if (event.code === 'Space') {
                 event.preventDefault();
                 if (!event.repeat) {
@@ -2486,6 +2568,7 @@
             const blackholesEl = document.getElementById('stat-blackholes');
             const wormholesEl = document.getElementById('stat-wormholes');
             const clustersEl = document.getElementById('stat-clusters');
+            const linkModeEl = document.getElementById('stat-link-mode');
 
             if (marksEl) {
                 marksEl.textContent = String(Array.isArray(marks) ? marks.length : 0);
@@ -2501,6 +2584,10 @@
             }
             if (clustersEl) {
                 clustersEl.textContent = String(Number.isFinite(globalClusterCount) ? globalClusterCount : 0);
+            }
+            if (linkModeEl) {
+                linkModeEl.textContent = isLinkMode ? 'ACTIVE' : 'INACTIVE';
+                linkModeEl.style.color = isLinkMode ? '#ffd86b' : 'var(--green)';
             }
         }
 
