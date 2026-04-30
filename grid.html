@@ -537,6 +537,7 @@
         let spaceDust = [];
         let asteroids = [];
         let activeMeteors = [];
+        let warpRipples = [];
         const NUM_STARS = 400;
         const SPACE_DUST_COUNT = 150;
         const ASTEROID_COUNT = 30;
@@ -581,6 +582,7 @@
         const WORMHOLE_PAN_DURATION_MS = 1800;
         let activeWormholes = [];
         let cameraPanAnimation = null;
+        let isWarpJumping = false;
         let cinematicMode = false;
         let cinematicTimeout = null;
         let globalClusterCount = 0;
@@ -752,6 +754,17 @@
                 speed: QUANTUM_RIPPLE_SPEED,
                 bandWidth: QUANTUM_RIPPLE_BAND_WIDTH,
                 displacement: QUANTUM_RIPPLE_DISPLACEMENT
+            });
+        }
+
+        function spawnWarpExplosion(worldX, worldY) {
+            warpRipples.push({
+                x: worldX,
+                y: worldY,
+                radius: 10,
+                maxRadius: 300,
+                alpha: 1,
+                startTime: performance.now()
             });
         }
 
@@ -1634,7 +1647,25 @@
                 camera.zoomLevel = cameraPanAnimation.fromZoom + ((cameraPanAnimation.toZoom - cameraPanAnimation.fromZoom) * eased);
             }
 
-            if (progress >= 1) {
+            if (
+                isWarpJumping &&
+                Math.abs(camera.offsetX - targetOffsetX) < 10 &&
+                Math.abs(camera.offsetY - targetOffsetY) < 10
+            ) {
+                isWarpJumping = false;
+                spawnWarpExplosion(camera.offsetX, camera.offsetY);
+            }
+
+            const reachedTarget =
+                Math.abs(camera.offsetX - cameraPanAnimation.toX) < 0.1 &&
+                Math.abs(camera.offsetY - cameraPanAnimation.toY) < 0.1;
+
+            if (progress >= 1 || reachedTarget) {
+                camera.offsetX = cameraPanAnimation.toX;
+                camera.offsetY = cameraPanAnimation.toY;
+                if (Number.isFinite(cameraPanAnimation.toZoom)) {
+                    camera.zoomLevel = cameraPanAnimation.toZoom;
+                }
                 cameraPanAnimation = null;
                 if (cinematicMode) {
                     cinematicTimeout = setTimeout(startCinematicPan, 3000); // Wait 3 seconds at destination
@@ -2161,6 +2192,26 @@
             drawBackgroundGrid();
             drawHyperlanes();
             drawQuantumRipples(nowMs);
+            if (warpRipples.length > 0) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'screen';
+                for (let i = warpRipples.length - 1; i >= 0; i--) {
+                    const ripple = warpRipples[i];
+                    const screen = worldToScreen(ripple.x, ripple.y);
+                    ctx.strokeStyle = `rgba(0, 255, 255, ${ripple.alpha})`;
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(screen.x, screen.y, ripple.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ripple.radius += 10;
+                    ripple.alpha -= 0.05;
+                    if (ripple.alpha <= 0 || ripple.radius >= ripple.maxRadius) {
+                        warpRipples.splice(i, 1);
+                    }
+                }
+                ctx.restore();
+            }
             updateAndDrawShootingStars();
             for (let i = activeMeteors.length - 1; i >= 0; i--) {
                 const meteor = activeMeteors[i];
@@ -2855,6 +2906,7 @@
             targetOffsetX = x;
             targetOffsetY = y;
             targetZoom = 1;
+            isWarpJumping = true;
 
             cameraPanAnimation = {
                 startTime: performance.now(),
