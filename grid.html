@@ -1506,7 +1506,7 @@
             camera.offsetY = node.y;
             hyperspaceFlashAlpha = 0.85;
             updateHover(mouseX, mouseY);
-            addEventLog(`Hyperspace jump to node ${String(node.hash || '').slice(0, 8)}`);
+            addEventLog(`Hyperspace jump to node ${node.hash ? node.hash.slice(0, 8) : 'Temporary'}`);
         }
 
         function render() {
@@ -1804,7 +1804,7 @@
             if (nextHoveredId !== previousHoveredId) {
                 if (hoveredMark) {
                     playMarkSound(hoveredMark.hash, screenX);
-                    addEventLog(`Discovered Mark: ${hoveredMark.hash.slice(0, 8)} at [${Math.round(hoveredMark.x)}, ${Math.round(hoveredMark.y)}]`);
+                    if (hoveredMark.hash) addEventLog(`Discovered Mark: ${hoveredMark.hash.slice(0, 8)} at [${Math.round(hoveredMark.x)}, ${Math.round(hoveredMark.y)}]`); else addEventLog('Discovered Temporary Mark');
                 } else {
                     stopSound();
                 }
