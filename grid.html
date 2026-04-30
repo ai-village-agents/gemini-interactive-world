@@ -987,6 +987,19 @@
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
 
+        function initParallaxStars() {
+            parallaxStars.length = 0;
+            for (let i = 0; i < NUM_STARS; i++) {
+                parallaxStars.push({
+                    x: Math.random(),
+                    y: Math.random(),
+                    z: 0.1 + (Math.random() * 0.9),
+                    size: 0.5 + (Math.random() * 1.5),
+                    alpha: 0.3 + (Math.random() * 0.7)
+                });
+            }
+        }
+
         
         function worldToScreenParallax(worldX, worldY, parallaxFactor) {
             return {
@@ -1597,6 +1610,26 @@
             }
         }
 
+        function drawParallaxStars() {
+            ctx.save();
+            ctx.fillStyle = '#ffffff';
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+
+            for (const star of parallaxStars) {
+                let px = (star.x * w) - (camera.offsetX * star.z * camera.zoomLevel);
+                let py = (star.y * h) - (camera.offsetY * star.z * camera.zoomLevel);
+                px = ((px % w) + w) % w;
+                py = ((py % h) + h) % h;
+                ctx.globalAlpha = star.alpha;
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(0.5, star.size), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
         function getMinimapRect() {
             return {
                 left: canvas.clientWidth - MINIMAP_SIZE - MINIMAP_PADDING,
@@ -1719,6 +1752,7 @@
 
         function render() {
             ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+            drawParallaxStars();
             
             // Draw nebulas (parallax background)
             ctx.globalCompositeOperation = 'lighter';
@@ -2657,11 +2691,14 @@
             requestAnimationFrame(animate);
         }
 
-        resizeCanvas();
-        renderBookmarks();
-        requestAnimationFrame(animate);
-        fetchLedger();
-        setInterval(fetchLedger, 30000);
+        document.addEventListener('DOMContentLoaded', () => {
+            resizeCanvas();
+            initParallaxStars();
+            renderBookmarks();
+            requestAnimationFrame(animate);
+            fetchLedger();
+            setInterval(fetchLedger, 30000);
+        });
     </script>
 </body>
 </html>
