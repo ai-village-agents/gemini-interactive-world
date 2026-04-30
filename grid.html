@@ -1133,26 +1133,58 @@
                 return;
             }
 
-            const now = Date.now();
-            const dashShift = -((now * 0.03) % 28);
-            const pulse = (Math.sin(now * 0.004) + 1) * 0.5;
-            const alpha = 0.14 + (pulse * 0.2);
+            const now = performance.now();
+            const dashShift = -((now * 0.02) % 24);
+            const basePulse = (Math.sin(now * 0.006) + 1) * 0.5;
+            const baseAlpha = 0.16 + (basePulse * 0.22);
 
             ctx.save();
             ctx.setLineDash([8, 6]);
             ctx.lineDashOffset = dashShift;
             ctx.lineWidth = 1.6;
-            ctx.shadowColor = `rgba(140, 255, 220, ${alpha})`;
+            ctx.shadowColor = `rgba(90, 255, 255, ${baseAlpha})`;
             ctx.shadowBlur = 8;
 
             for (const wormhole of activeWormholes) {
                 const a = worldToScreen(wormhole.source.x, wormhole.source.y);
                 const b = worldToScreen(wormhole.target.x, wormhole.target.y);
-                ctx.strokeStyle = `rgba(140, 255, 220, ${alpha})`;
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const phase = ((wormhole.source.hash.charCodeAt(0) + wormhole.target.hash.charCodeAt(0)) % 100) / 100;
+                const travel = ((now * 0.00025) + phase) % 1;
+                const pulseX = a.x + (dx * travel);
+                const pulseY = a.y + (dy * travel);
+                const pulseRadius = 6 + (Math.sin((now * 0.012) + (phase * Math.PI * 2)) + 1) * 2.5;
+                const trailStartT = Math.max(0, travel - 0.12);
+                const trailX = a.x + (dx * trailStartT);
+                const trailY = a.y + (dy * trailStartT);
+
+                ctx.strokeStyle = `rgba(120, 255, 255, ${baseAlpha})`;
                 ctx.beginPath();
                 ctx.moveTo(a.x, a.y);
                 ctx.lineTo(b.x, b.y);
                 ctx.stroke();
+
+                ctx.save();
+                ctx.setLineDash([]);
+                ctx.lineWidth = 2.4;
+                ctx.shadowColor = 'rgba(0, 255, 255, 0.95)';
+                ctx.shadowBlur = 18;
+                ctx.strokeStyle = 'rgba(120, 255, 255, 0.9)';
+                ctx.beginPath();
+                ctx.moveTo(trailX, trailY);
+                ctx.lineTo(pulseX, pulseY);
+                ctx.stroke();
+
+                const energyGlow = ctx.createRadialGradient(pulseX, pulseY, 0, pulseX, pulseY, pulseRadius * 2.6);
+                energyGlow.addColorStop(0, 'rgba(170, 255, 255, 1)');
+                energyGlow.addColorStop(0.3, 'rgba(80, 255, 255, 0.9)');
+                energyGlow.addColorStop(1, 'rgba(0, 255, 255, 0)');
+                ctx.fillStyle = energyGlow;
+                ctx.beginPath();
+                ctx.arc(pulseX, pulseY, pulseRadius * 2.6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
             }
             ctx.restore();
         }
