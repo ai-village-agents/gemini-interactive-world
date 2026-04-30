@@ -533,8 +533,13 @@
         let ephemeralEchos = [];
         let hoveredMark = null;
         let parallaxStars = [];
+        let asteroids = [];
         let activeMeteors = [];
         const NUM_STARS = 400;
+        const ASTEROID_COUNT = 30;
+        const ASTEROID_INIT_MIN = -5000;
+        const ASTEROID_INIT_MAX = 5000;
+        const ASTEROID_WRAP_LIMIT = 6000;
         let mouseX = 0;
         let mouseY = 0;
         let isDragging = false;
@@ -998,6 +1003,34 @@
                     z: 0.1 + (Math.random() * 0.9),
                     size: 0.5 + (Math.random() * 1.5),
                     alpha: 0.3 + (Math.random() * 0.7)
+                });
+            }
+        }
+
+        function initAsteroids() {
+            asteroids.length = 0;
+            for (let i = 0; i < ASTEROID_COUNT; i++) {
+                const size = 24 + (Math.random() * 64);
+                const vertexCount = 6 + Math.floor(Math.random() * 5);
+                const vertices = [];
+                for (let j = 0; j < vertexCount; j++) {
+                    const angle = (j / vertexCount) * Math.PI * 2;
+                    const radius = size * (0.55 + (Math.random() * 0.55));
+                    vertices.push({
+                        x: Math.cos(angle) * radius,
+                        y: Math.sin(angle) * radius
+                    });
+                }
+
+                asteroids.push({
+                    x: ASTEROID_INIT_MIN + (Math.random() * (ASTEROID_INIT_MAX - ASTEROID_INIT_MIN)),
+                    y: ASTEROID_INIT_MIN + (Math.random() * (ASTEROID_INIT_MAX - ASTEROID_INIT_MIN)),
+                    vx: (Math.random() * 0.9) - 0.45,
+                    vy: (Math.random() * 0.9) - 0.45,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: ((Math.random() * 0.0025) + 0.0003) * (Math.random() < 0.5 ? -1 : 1),
+                    size,
+                    vertices
                 });
             }
         }
@@ -1644,6 +1677,51 @@
             ctx.restore();
         }
 
+        function drawAsteroids() {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(66, 58, 49, 0.82)';
+            ctx.lineWidth = 1.1;
+
+            for (const asteroid of asteroids) {
+                asteroid.x += asteroid.vx;
+                asteroid.y += asteroid.vy;
+                asteroid.rotation += asteroid.rotationSpeed;
+
+                if (asteroid.x > ASTEROID_WRAP_LIMIT) asteroid.x = -ASTEROID_WRAP_LIMIT;
+                if (asteroid.x < -ASTEROID_WRAP_LIMIT) asteroid.x = ASTEROID_WRAP_LIMIT;
+                if (asteroid.y > ASTEROID_WRAP_LIMIT) asteroid.y = -ASTEROID_WRAP_LIMIT;
+                if (asteroid.y < -ASTEROID_WRAP_LIMIT) asteroid.y = ASTEROID_WRAP_LIMIT;
+
+                const s = worldToScreen(asteroid.x, asteroid.y);
+                const radiusPx = asteroid.size * camera.zoomLevel;
+
+                if (
+                    s.x + radiusPx < 0 ||
+                    s.x - radiusPx > canvas.clientWidth ||
+                    s.y + radiusPx < 0 ||
+                    s.y - radiusPx > canvas.clientHeight
+                ) {
+                    continue;
+                }
+
+                ctx.save();
+                ctx.translate(s.x, s.y);
+                ctx.rotate(asteroid.rotation);
+                ctx.beginPath();
+                const first = asteroid.vertices[0];
+                ctx.moveTo(first.x * camera.zoomLevel, first.y * camera.zoomLevel);
+                for (let i = 1; i < asteroid.vertices.length; i++) {
+                    const vertex = asteroid.vertices[i];
+                    ctx.lineTo(vertex.x * camera.zoomLevel, vertex.y * camera.zoomLevel);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            ctx.restore();
+        }
+
         function getMinimapRect() {
             return {
                 left: canvas.clientWidth - MINIMAP_SIZE - MINIMAP_PADDING,
@@ -1790,6 +1868,7 @@
             }
             ctx.globalCompositeOperation = 'source-over';
 
+            drawAsteroids();
             drawBackgroundGrid();
             updateAndDrawShootingStars();
             for (let i = activeMeteors.length - 1; i >= 0; i--) {
@@ -2713,6 +2792,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             resizeCanvas();
             initParallaxStars();
+            initAsteroids();
             renderBookmarks();
             requestAnimationFrame(animate);
             fetchLedger();
