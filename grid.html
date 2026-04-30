@@ -1489,6 +1489,45 @@
             vy: particle.baseVy
         }));
         const shootingStars = [];
+        
+        function spawnMeteor() {
+            const speed = 5 + (Math.random() * 6);
+            const angle = (Math.PI / 4) + ((Math.random() - 0.5) * 0.35);
+            const spawnFromTop = Math.random() < 0.5;
+            const startX = spawnFromTop
+                ? (Math.random() * canvas.clientWidth)
+                : (-50 + (Math.random() * 80));
+            const startY = spawnFromTop
+                ? (-50 + (Math.random() * 80))
+                : (Math.random() * canvas.clientHeight * 0.7);
+
+            const meteor = {
+                x: startX,
+                y: startY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                length: 8 + (Math.random() * 16),
+                life: 1.0,
+                hue: 188 + (Math.random() * 24)
+            };
+            activeMeteors.push(meteor);
+
+            const context = ensureAudioContext();
+            if (context) {
+                const now = context.currentTime;
+                const osc = context.createOscillator();
+                const gain = context.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(1500 + (Math.random() * 500), now);
+                osc.frequency.exponentialRampToValueAtTime(700 + (Math.random() * 180), now + 0.3);
+                gain.gain.setValueAtTime(0.018, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+                osc.connect(gain);
+                gain.connect(context.destination);
+                osc.start(now);
+                osc.stop(now + 0.31);
+            }
+        }
 
         function updateAndDrawShootingStars() {
             if (Math.random() < 0.006) {
@@ -1692,6 +1731,30 @@
 
             drawBackgroundGrid();
             updateAndDrawShootingStars();
+            for (let i = activeMeteors.length - 1; i >= 0; i--) {
+                const meteor = activeMeteors[i];
+                const alpha = Math.max(0, meteor.life);
+                const tailX = meteor.x - (meteor.length * meteor.vx);
+                const tailY = meteor.y - (meteor.length * meteor.vy);
+                const streak = ctx.createLinearGradient(meteor.x, meteor.y, tailX, tailY);
+                streak.addColorStop(0, `hsla(${meteor.hue}, 100%, 78%, ${alpha})`);
+                streak.addColorStop(0.5, `hsla(${meteor.hue}, 100%, 62%, ${alpha * 0.45})`);
+                streak.addColorStop(1, `hsla(${meteor.hue}, 100%, 55%, 0)`);
+                ctx.strokeStyle = streak;
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.moveTo(meteor.x, meteor.y);
+                ctx.lineTo(tailX, tailY);
+                ctx.stroke();
+
+                meteor.x += meteor.vx;
+                meteor.y += meteor.vy;
+                meteor.life -= 0.02;
+
+                if (meteor.life <= 0) {
+                    activeMeteors.splice(i, 1);
+                }
+            }
             const mouseWorld = screenToWorld(mouseX, mouseY);
             const repelDistance = 250 / camera.zoomLevel;
             const defaultNodeGravityRangeSq = 1500 * 1500;
@@ -2490,6 +2553,9 @@
             updateCameraPanAnimation(performance.now());
             handleKeyboardPanning();
             applyGravity();
+            if (Math.random() < 0.005) {
+                spawnMeteor();
+            }
             render();
             statsFrameCounter++;
             if (statsFrameCounter % 30 === 0) {
