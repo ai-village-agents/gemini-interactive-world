@@ -1122,125 +1122,137 @@
             ctx.restore();
         }
 
-        function drawClusters() {
-            let clusterCount = 0;
-            if (!Array.isArray(marks) || marks.length < 3) {
-                globalClusterCount = clusterCount;
-                return;
+        function calculateConstellations(nodes) {
+            if (!Array.isArray(nodes) || nodes.length < 3) {
+                return [];
             }
 
-            const clusterPrefixes = ['The Silent', 'Obsidian', 'Luminous', 'Crimson', 'Astral', 'Ethereal', 'Veiled'];
-            const clusterNouns = ['Sector', 'Expanse', 'Nebula', 'Cluster', 'Rift', 'Anomaly', 'Abyss'];
-            const clusterDistance = 800;
-            const clusterDistanceSq = clusterDistance * clusterDistance;
-            const visited = new Array(marks.length).fill(false);
+            const thresholdPx = 1000;
+            const thresholdSq = thresholdPx * thresholdPx;
+            const nodeScreens = nodes.map((node) => worldToScreen(node.x, node.y));
+            const visited = new Array(nodes.length).fill(false);
+            const constellationPrefixes = ['Silent', 'Obsidian', 'Luminous', 'Crimson', 'Astral', 'Veiled', 'Solar'];
+            const constellationNouns = ['Crown', 'Circuit', 'Forge', 'Drift', 'Vault', 'Arc', 'Signal'];
+            const constellations = [];
 
-            for (let i = 0; i < marks.length; i++) {
+            for (let i = 0; i < nodes.length; i++) {
                 if (visited[i]) {
                     continue;
                 }
 
-                const queue = [i];
-                const clusterIndices = [];
                 visited[i] = true;
+                const queue = [i];
+                const groupIndices = [];
 
                 while (queue.length > 0) {
                     const currentIndex = queue.pop();
-                    const current = marks[currentIndex];
-                    clusterIndices.push(currentIndex);
+                    groupIndices.push(currentIndex);
+                    const current = nodeScreens[currentIndex];
 
-                    for (let j = 0; j < marks.length; j++) {
+                    for (let j = 0; j < nodes.length; j++) {
                         if (visited[j]) {
                             continue;
                         }
-
-                        const candidate = marks[j];
+                        const candidate = nodeScreens[j];
                         const dx = current.x - candidate.x;
                         const dy = current.y - candidate.y;
-                        const distSq = (dx * dx) + (dy * dy);
-                        if (distSq <= clusterDistanceSq) {
+                        if (((dx * dx) + (dy * dy)) <= thresholdSq) {
                             visited[j] = true;
                             queue.push(j);
                         }
                     }
                 }
 
-                if (clusterIndices.length < 3) {
+                if (groupIndices.length < 3) {
                     continue;
                 }
 
+                let sumHash = 0;
                 let sumX = 0;
                 let sumY = 0;
-                for (const idx of clusterIndices) {
-                    sumX += marks[idx].x;
-                    sumY += marks[idx].y;
+                let minX = Infinity;
+                let minY = Infinity;
+                let maxX = -Infinity;
+                let maxY = -Infinity;
+
+                for (const index of groupIndices) {
+                    const node = nodes[index];
+                    const screen = nodeScreens[index];
+                    const hashPrefix = typeof node.hash === 'string' ? node.hash.slice(0, 8) : '';
+                    const hashValue = Number.parseInt(hashPrefix || '0', 16) || 0;
+                    sumHash += hashValue;
+                    sumX += node.x;
+                    sumY += node.y;
+                    if (screen.x < minX) minX = screen.x;
+                    if (screen.y < minY) minY = screen.y;
+                    if (screen.x > maxX) maxX = screen.x;
+                    if (screen.y > maxY) maxY = screen.y;
                 }
 
-                const centerX = sumX / clusterIndices.length;
-                const centerY = sumY / clusterIndices.length;
+                const avgHash = Math.floor(sumHash / groupIndices.length) >>> 0;
+                const avgX = sumX / groupIndices.length;
+                const avgY = sumY / groupIndices.length;
+                const coordSeed = (Math.floor(Math.abs(avgX)) * 31 + Math.floor(Math.abs(avgY)) * 17) >>> 0;
+                const nameSeed = (avgHash ^ coordSeed) >>> 0;
+                const prefix = constellationPrefixes[nameSeed % constellationPrefixes.length];
+                const noun = constellationNouns[Math.floor(nameSeed / constellationPrefixes.length) % constellationNouns.length];
+                const constellationName = `${prefix} ${noun}`.toUpperCase();
+                const padding = 18;
 
-                let maxDist = 0;
-                for (const idx of clusterIndices) {
-                    const dx = marks[idx].x - centerX;
-                    const dy = marks[idx].y - centerY;
-                    const dist = Math.hypot(dx, dy);
-                    if (dist > maxDist) {
-                        maxDist = dist;
+                constellations.push({
+                    name: constellationName,
+                    bounds: {
+                        x: minX - padding,
+                        y: minY - padding,
+                        w: (maxX - minX) + (padding * 2),
+                        h: (maxY - minY) + (padding * 2)
                     }
-                }
+                });
+            }
 
-                const worldRadius = Math.max(900, maxDist + 450);
-                const s = worldToScreen(centerX, centerY);
-                const screenRadius = worldRadius * camera.zoomLevel;
-                if (screenRadius < 2) {
-                    continue;
-                }
+            return constellations;
+        }
 
+        function drawConstellations(constellations) {
+            if (!Array.isArray(constellations) || constellations.length === 0) {
+                globalClusterCount = 0;
+                return;
+            }
+
+            const dashShift = -((Date.now() * 0.03) % 20);
+            globalClusterCount = constellations.length;
+
+            for (const constellation of constellations) {
+                const b = constellation.bounds;
                 if (
-                    s.x + screenRadius < 0 ||
-                    s.x - screenRadius > canvas.clientWidth ||
-                    s.y + screenRadius < 0 ||
-                    s.y - screenRadius > canvas.clientHeight
+                    b.x + b.w < 0 ||
+                    b.x > canvas.clientWidth ||
+                    b.y + b.h < 0 ||
+                    b.y > canvas.clientHeight
                 ) {
                     continue;
                 }
 
-                const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, screenRadius);
-                glow.addColorStop(0, 'rgba(130, 150, 255, 0.06)');
-                glow.addColorStop(0.45, 'rgba(100, 150, 255, 0.04)');
-                glow.addColorStop(1, 'rgba(100, 150, 255, 0)');
-
-                ctx.fillStyle = glow;
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, screenRadius, 0, Math.PI * 2);
-                ctx.fill();
-
-                const sortedHashes = clusterIndices
-                    .map((idx) => (typeof marks[idx].hash === 'string' ? marks[idx].hash : ''))
-                    .sort();
-                const clusterSeed = sortedHashes.join('');
-                let numericHash = 0;
-                for (let n = 0; n < clusterSeed.length; n++) {
-                    numericHash = ((numericHash * 31) + clusterSeed.charCodeAt(n)) >>> 0;
-                }
-
-                const prefix = clusterPrefixes[numericHash % clusterPrefixes.length];
-                const noun = clusterNouns[Math.floor(numericHash / clusterPrefixes.length) % clusterNouns.length];
-                const clusterName = `${prefix} ${noun}`.toUpperCase();
+                ctx.save();
+                ctx.setLineDash([8, 6]);
+                ctx.lineDashOffset = dashShift;
+                ctx.strokeStyle = 'rgba(170, 220, 255, 0.35)';
+                ctx.fillStyle = 'rgba(170, 220, 255, 0.06)';
+                ctx.lineWidth = 1.1;
+                ctx.fillRect(b.x, b.y, b.w, b.h);
+                ctx.strokeRect(b.x, b.y, b.w, b.h);
+                ctx.restore();
 
                 ctx.save();
-                ctx.font = '13px monospace';
+                ctx.font = '12px monospace';
                 ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = 'rgba(200, 230, 255, 0.8)';
-                ctx.shadowColor = 'rgba(200, 230, 255, 0.45)';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = 'rgba(200, 235, 255, 0.86)';
+                ctx.shadowColor = 'rgba(180, 220, 255, 0.35)';
                 ctx.shadowBlur = 6;
-                ctx.fillText(clusterName, s.x, s.y - 6);
-                clusterCount++;
+                ctx.fillText(constellation.name, b.x + (b.w / 2), b.y - 6);
                 ctx.restore();
             }
-
-            globalClusterCount = clusterCount;
         }
 
         function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
@@ -1991,7 +2003,8 @@
                 ctx.shadowBlur = 0;
             }
 
-            drawClusters();
+            const constellations = calculateConstellations(marks);
+            drawConstellations(constellations);
             drawWormholes();
 
             for (const mark of marks) {
