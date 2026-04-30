@@ -1342,6 +1342,10 @@
             const baseLightness = 50;
             const currentLightness = Math.min(100, baseLightness + (intensityBonus * 50));
             const alphaBoost = scanIntensity * 0.4;
+            if (explicitEdges.some(e => e.source === mark || e.target === mark)) {
+                ctx.shadowBlur = 15 + Math.sin(Date.now() / 200) * 5;
+                ctx.shadowColor = "hsla(45, 100%, 70%, 0.8)";
+            }
             if (isBlackHole) {
                 const ringGlow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius * 5.2);
                 ringGlow.addColorStop(0, isHovered ? 'rgba(255, 255, 255, 0.55)' : `rgba(215, 180, 255, ${0.34 + alphaBoost})`);
@@ -1393,6 +1397,8 @@
                 ctx.arc(s.x, s.y, radius * 2.3, 0, Math.PI * 2);
                 ctx.fill();
             }
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = 'transparent';
 
             if (Math.random() < 0.001) console.log("Checking satellites for mark:", mark.id, mark.satellites);
             if (mark.satellites && mark.satellites.length > 0) {
