@@ -435,7 +435,7 @@
     </div>
 
     <div id="loading">Syncing with origin...</div>
-    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click to send a sonar ping. Click a mark to verify.</div>
+    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click to send a sonar ping. H - Harmonic Sweep. Click a mark to verify.</div>
     <div id="bookmarks-panel"><div style="font-weight:bold; margin-bottom: 8px; border-bottom: 1px solid var(--green); padding-bottom: 4px;">SAVED WAYPOINTS</div><div id="bookmarks-list"></div><button class="bookmark-add-btn" id="bookmark-add">+ Bookmark Current View</button></div>
     <div id="custom-prompt-overlay"><div id="custom-prompt"><div style="color:var(--green-soft);margin-bottom:10px;">Enter Waypoint Name:</div><input type="text" id="custom-prompt-input" autocomplete="off"><br><button id="custom-prompt-save">Save</button><button id="custom-prompt-cancel">Cancel</button></div></div>
     <div id="event-log"></div>
@@ -543,12 +543,18 @@
         let currentOscillator = null;
         let currentGainNode = null;
         let activeScanWaves = [];
+        let activeHarmonicSweeps = [];
+        let activeResonances = [];
         let activePackets = [];
         let edges = [];
         let parsedData = [];
         let hyperspaceFlashAlpha = 0;
         const WAVE_SPEED = 250;
         const WAVE_MAX_RADIUS = 15000;
+        const HARMONIC_SWEEP_SPEED = 85;
+        const HARMONIC_SWEEP_MAX_RADIUS = 22000;
+        const HARMONIC_SWEEP_WIDTH = 700;
+        const RESONANCE_DURATION_MS = 2400;
         const WORMHOLE_MIN_HASH_LENGTH = 64;
         const WORMHOLE_CLICK_DISTANCE_PX = 10;
         const WORMHOLE_PAN_DURATION_MS = 1800;
@@ -699,6 +705,20 @@
             }
         }
 
+        function spawnHarmonicSweep() {
+            ensureAudioContext();
+            activeHarmonicSweeps.push({
+                x: camera.offsetX,
+                y: camera.offsetY,
+                radius: 0,
+                maxRadius: HARMONIC_SWEEP_MAX_RADIUS,
+                speed: HARMONIC_SWEEP_SPEED,
+                active: true,
+                triggeredMarkIds: new Set()
+            });
+            addEventLog(`Harmonic sweep initiated at [${Math.round(camera.offsetX)}, ${Math.round(camera.offsetY)}]`);
+        }
+
         function ensureAudioContext() {
             if (!audioContext) {
                 const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -790,6 +810,93 @@
 
             currentOscillator = oscillator;
             currentGainNode = gainNode;
+        }
+
+        function createDeterministicRandomFromHash(hashHex) {
+            const fallback = Math.floor(Math.random() * 0xFFFFFFFF);
+            const seedA = Number.parseInt(String(hashHex || '').slice(0, 8), 16);
+            const seedB = Number.parseInt(String(hashHex || '').slice(8, 16), 16);
+            let state = (Number.isFinite(seedA) ? seedA : fallback) ^ (Number.isFinite(seedB) ? seedB : 0xA5A5A5A5);
+            if (state === 0) {
+                state = 0x9E3779B9;
+            }
+            return () => {
+                state ^= state << 13;
+                state ^= state >>> 17;
+                state ^= state << 5;
+                return (state >>> 0) / 0x100000000;
+            };
+        }
+
+        function midiToFrequency(midiNote) {
+            return 440 * Math.pow(2, (midiNote - 69) / 12);
+        }
+
+        function playHarmonicChord(hashHex, screenX) {
+            const context = ensureAudioContext();
+            if (!context) {
+                return;
+            }
+
+            const rand = createDeterministicRandomFromHash(hashHex);
+            const rootMidi = 43 + Math.floor(rand() * 15); // G2-A3
+            const chordShapes = [
+                [0, 4, 7],
+                [0, 3, 7],
+                [0, 5, 9],
+                [0, 4, 7, 11],
+                [0, 3, 7, 10]
+            ];
+            const selectedShape = chordShapes[Math.floor(rand() * chordShapes.length)];
+            const intervals = selectedShape.slice();
+
+            if (intervals.length === 3 && rand() > 0.52) {
+                const extensions = [10, 12, 14];
+                intervals.push(extensions[Math.floor(rand() * extensions.length)]);
+            }
+
+            const panner = context.createStereoPanner();
+            const panX = ((screenX || (window.innerWidth / 2)) / window.innerWidth) * 2 - 1;
+            panner.pan.value = Math.max(-1, Math.min(1, panX));
+
+            const masterGain = context.createGain();
+            const now = context.currentTime;
+            const attack = 0.14;
+            const releaseTime = 2.8;
+            masterGain.gain.setValueAtTime(0.0001, now);
+            masterGain.gain.exponentialRampToValueAtTime(0.14, now + attack);
+            masterGain.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
+
+            masterGain.connect(panner);
+            panner.connect(context.destination);
+
+            for (let i = 0; i < intervals.length; i++) {
+                const osc = context.createOscillator();
+                const oscGain = context.createGain();
+                const baseMidi = rootMidi + intervals[i];
+                const octaveLift = i > 0 && rand() > 0.42 ? 12 : 0;
+                const frequency = midiToFrequency(baseMidi + octaveLift);
+                const types = ['sine', 'triangle', 'triangle', 'sawtooth'];
+
+                osc.type = types[Math.floor(rand() * types.length)];
+                osc.frequency.setValueAtTime(frequency, now);
+                osc.detune.setValueAtTime((rand() - 0.5) * 9, now);
+
+                oscGain.gain.setValueAtTime(0.8 / intervals.length, now);
+                osc.connect(oscGain);
+                oscGain.connect(masterGain);
+                osc.start(now + (i * 0.008));
+                osc.stop(now + releaseTime + 0.08);
+
+                osc.onended = () => {
+                    try {
+                        osc.disconnect();
+                        oscGain.disconnect();
+                    } catch (error) {
+                        // Nodes may already be disconnected.
+                    }
+                };
+            }
         }
 
         function extractHash(body) {
@@ -1618,6 +1725,33 @@
                 ctx.stroke();
             }
 
+            // Update and draw harmonic sweep waves
+            for (let i = activeHarmonicSweeps.length - 1; i >= 0; i--) {
+                const wave = activeHarmonicSweeps[i];
+                wave.radius += wave.speed;
+
+                if (wave.radius > wave.maxRadius) {
+                    activeHarmonicSweeps.splice(i, 1);
+                    continue;
+                }
+
+                const s = worldToScreen(wave.x, wave.y);
+                const screenRadius = wave.radius * camera.zoomLevel;
+                const alpha = Math.max(0, 1 - (wave.radius / wave.maxRadius));
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, screenRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(150, 215, 255, ${alpha * 0.85})`;
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, Math.max(0, screenRadius - 4), 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(100, 170, 255, ${alpha * 0.35})`;
+                ctx.lineWidth = 7;
+                ctx.stroke();
+            }
+
             // Draw constellation lines
             for (const edge of edges) {
                 const a = worldToScreen(edge.source.x, edge.source.y);
@@ -1702,7 +1836,60 @@
                         }
                     }
                 }
+                for (const wave of activeHarmonicSweeps) {
+                    const dist = Math.hypot(mark.x - wave.x, mark.y - wave.y);
+                    const diff = Math.abs(dist - wave.radius);
+                    if (diff < HARMONIC_SWEEP_WIDTH) {
+                        const intensity = 1 - (diff / HARMONIC_SWEEP_WIDTH);
+                        scanIntensity = Math.max(scanIntensity, intensity * (1 - (wave.radius / wave.maxRadius)));
+
+                        if (diff < wave.speed && !wave.triggeredMarkIds.has(mark.id)) {
+                            wave.triggeredMarkIds.add(mark.id);
+                            const s = worldToScreen(mark.x, mark.y);
+                            playHarmonicChord(mark.hash, s.x);
+                            activeResonances.push({
+                                x: mark.x,
+                                y: mark.y,
+                                hue: Number.isFinite(mark.hue) ? mark.hue : 200,
+                                createdAt: performance.now(),
+                                duration: RESONANCE_DURATION_MS
+                            });
+                        }
+                    }
+                }
                 drawNode(mark, hoveredMark && hoveredMark.id === mark.id, scanIntensity);
+            }
+
+            // Draw temporary resonance circles generated by harmonic sweep hits
+            const resonanceNow = performance.now();
+            for (let i = activeResonances.length - 1; i >= 0; i--) {
+                const resonance = activeResonances[i];
+                const age = resonanceNow - resonance.createdAt;
+                if (age >= resonance.duration) {
+                    activeResonances.splice(i, 1);
+                    continue;
+                }
+
+                const progress = age / resonance.duration;
+                const s = worldToScreen(resonance.x, resonance.y);
+                const radius = 12 + (30 * progress);
+                const alpha = 0.42 * (1 - progress);
+                const hue = Number.isFinite(resonance.hue) ? resonance.hue : 200;
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `hsla(${hue}, 100%, 68%, ${alpha})`;
+                ctx.lineWidth = 2.6;
+                ctx.shadowColor = `hsla(${hue}, 100%, 65%, ${alpha})`;
+                ctx.shadowBlur = 12;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, Math.max(4, radius * 0.6), 0, Math.PI * 2);
+                ctx.strokeStyle = `hsla(${hue}, 100%, 74%, ${alpha * 0.7})`;
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
             }
 
             drawMinimap();
@@ -2115,6 +2302,11 @@
 
         });
         window.addEventListener('keydown', (event) => {
+            if (event.code === 'KeyH') {
+                if (!event.repeat) {
+                    spawnHarmonicSweep();
+                }
+            }
             if (event.code === 'Space') {
                 event.preventDefault();
                 if (!event.repeat) {
