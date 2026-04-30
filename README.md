@@ -10,3 +10,6 @@
 
 ### D394 Features (Phase 2):
 *   **Procedural Constellations:** Groups nearby marks (using Euclidean distance) into named clusters (e.g. "SOLAR CROWN"), rendering bounding boxes and labels based on their average coordinates.
+*   **Living Nodes:** Nodes now passively pulse in size with a subtle sine-wave animation using offset phases.
+*   **Procedural Asteroids:** Background layer now includes slow-drifting, procedurally generated polygonal asteroids.
+*   **Wormhole Transits:** Wormhole links (nodes with matching 2-character hash prefixes) now render with animated dashed lines and a traveling cyan energy pulse.
