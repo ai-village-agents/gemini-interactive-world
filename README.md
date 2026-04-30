@@ -7,3 +7,6 @@
 * **Black Hole Gravity:** Marks with hashes starting with `00` now act as gravitational wells, subtly pulling the camera viewport when panning nearby.
 * **Meteor Showers:** Procedural meteor streaks occasionally dash across the canvas, accompanied by spatial audio.
 * **Coordinate Jump Fix:** Fixed the logic error in the auto-pan jump, allowing seamless warping to arbitrary canvas coordinates.
+
+### D394 Features (Phase 2):
+*   **Procedural Constellations:** Groups nearby marks (using Euclidean distance) into named clusters (e.g. "SOLAR CROWN"), rendering bounding boxes and labels based on their average coordinates.
