@@ -435,7 +435,7 @@
     </div>
 
     <div id="loading">Syncing with origin...</div>
-    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click to send a sonar ping. H - Harmonic Sweep. L - Link Mode. Click a mark to verify.</div>
+    <div id="canvas-instruction">Drag to pan. Scroll to zoom. Dbl-Click empty space for Quantum Ripple (or node/link for sonar ping). H - Harmonic Sweep. L - Link Mode. Click a mark to verify.</div>
     <div id="bookmarks-panel"><div style="font-weight:bold; margin-bottom: 8px; border-bottom: 1px solid var(--green); padding-bottom: 4px;">SAVED WAYPOINTS</div><div id="bookmarks-list"></div><button class="bookmark-add-btn" id="bookmark-add">+ Bookmark Current View</button></div>
     <div id="custom-prompt-overlay"><div id="custom-prompt"><div style="color:var(--green-soft);margin-bottom:10px;">Enter Waypoint Name:</div><input type="text" id="custom-prompt-input" autocomplete="off"><br><button id="custom-prompt-save">Save</button><button id="custom-prompt-cancel">Cancel</button></div></div>
     <div id="event-log"></div>
@@ -553,6 +553,7 @@
         let currentGainNode = null;
         let activeScanWaves = [];
         let activeHarmonicSweeps = [];
+        let activeQuantumRipples = [];
         let activeResonances = [];
         let activePackets = [];
         let edges = [];
@@ -565,6 +566,10 @@
         const HARMONIC_SWEEP_SPEED = 85;
         const HARMONIC_SWEEP_MAX_RADIUS = 22000;
         const HARMONIC_SWEEP_WIDTH = 700;
+        const QUANTUM_RIPPLE_DURATION_MS = 3600;
+        const QUANTUM_RIPPLE_SPEED = 2000;
+        const QUANTUM_RIPPLE_BAND_WIDTH = 900;
+        const QUANTUM_RIPPLE_DISPLACEMENT = 110;
         const NODE_PULSE_SPEED = 2.1;
         const NODE_PULSE_AMPLITUDE = 0.07;
         const RESONANCE_DURATION_MS = 2400;
@@ -733,6 +738,97 @@
                 triggeredMarkIds: new Set()
             });
             addEventLog(`Harmonic sweep initiated at [${Math.round(camera.offsetX)}, ${Math.round(camera.offsetY)}]`);
+        }
+
+        function spawnQuantumRipple(worldX, worldY) {
+            activeQuantumRipples.push({
+                x: worldX,
+                y: worldY,
+                createdAt: performance.now(),
+                durationMs: QUANTUM_RIPPLE_DURATION_MS,
+                speed: QUANTUM_RIPPLE_SPEED,
+                bandWidth: QUANTUM_RIPPLE_BAND_WIDTH,
+                displacement: QUANTUM_RIPPLE_DISPLACEMENT
+            });
+        }
+
+        function getQuantumRippleDisplacement(worldX, worldY, nowMs) {
+            if (activeQuantumRipples.length === 0) {
+                return { x: 0, y: 0 };
+            }
+
+            let dxTotal = 0;
+            let dyTotal = 0;
+
+            for (const ripple of activeQuantumRipples) {
+                const elapsedMs = nowMs - ripple.createdAt;
+                if (elapsedMs < 0 || elapsedMs > ripple.durationMs) {
+                    continue;
+                }
+
+                const life = elapsedMs / ripple.durationMs;
+                const radius = (elapsedMs / 1000) * ripple.speed;
+                const dx = worldX - ripple.x;
+                const dy = worldY - ripple.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < 0.001) {
+                    continue;
+                }
+
+                const bandDistance = Math.abs(dist - radius);
+                if (bandDistance > ripple.bandWidth) {
+                    continue;
+                }
+
+                const edgeFalloff = 1 - (bandDistance / ripple.bandWidth);
+                const lifeFalloff = 1 - life;
+                const strength = ripple.displacement * edgeFalloff * lifeFalloff;
+
+                dxTotal += (dx / dist) * strength;
+                dyTotal += (dy / dist) * strength;
+            }
+
+            return { x: dxTotal, y: dyTotal };
+        }
+
+        function updateQuantumRipples(nowMs) {
+            for (let i = activeQuantumRipples.length - 1; i >= 0; i--) {
+                const ripple = activeQuantumRipples[i];
+                if ((nowMs - ripple.createdAt) > ripple.durationMs) {
+                    activeQuantumRipples.splice(i, 1);
+                }
+            }
+        }
+
+        function drawQuantumRipples(nowMs) {
+            if (activeQuantumRipples.length === 0) {
+                return;
+            }
+
+            for (const ripple of activeQuantumRipples) {
+                const elapsedMs = nowMs - ripple.createdAt;
+                if (elapsedMs < 0 || elapsedMs > ripple.durationMs) {
+                    continue;
+                }
+                const life = elapsedMs / ripple.durationMs;
+                const radius = (elapsedMs / 1000) * ripple.speed;
+                const s = worldToScreen(ripple.x, ripple.y);
+                const screenRadius = radius * camera.zoomLevel;
+                const alpha = Math.max(0, 1 - life);
+                const bandPx = Math.max(2, ripple.bandWidth * camera.zoomLevel * 0.08);
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, screenRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(145, 220, 255, ${alpha * 0.65})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, Math.max(0, screenRadius - bandPx), 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(145, 220, 255, ${alpha * 0.24})`;
+                ctx.lineWidth = Math.max(1.5, bandPx);
+                ctx.stroke();
+            }
         }
 
         function ensureAudioContext() {
@@ -1065,6 +1161,7 @@
             const spacingWorld = 1000;
             const topLeft = screenToWorld(0, 0);
             const bottomRight = screenToWorld(canvas.clientWidth, canvas.clientHeight);
+            const nowMs = performance.now();
 
             const startX = Math.floor(topLeft.x / spacingWorld) * spacingWorld;
             const endX = Math.ceil(bottomRight.x / spacingWorld) * spacingWorld;
@@ -1073,21 +1170,54 @@
 
             ctx.lineWidth = 1;
             ctx.strokeStyle = 'rgba(0, 255, 102, 0.08)';
-            ctx.beginPath();
+            const hasQuantumRipples = activeQuantumRipples.length > 0;
+            if (!hasQuantumRipples) {
+                ctx.beginPath();
 
-            for (let x = startX; x <= endX; x += spacingWorld) {
-                const sx = worldToScreen(x, 0).x;
-                ctx.moveTo(sx, 0);
-                ctx.lineTo(sx, canvas.clientHeight);
+                for (let x = startX; x <= endX; x += spacingWorld) {
+                    const sx = worldToScreen(x, 0).x;
+                    ctx.moveTo(sx, 0);
+                    ctx.lineTo(sx, canvas.clientHeight);
+                }
+
+                for (let y = startY; y <= endY; y += spacingWorld) {
+                    const sy = worldToScreen(0, y).y;
+                    ctx.moveTo(0, sy);
+                    ctx.lineTo(canvas.clientWidth, sy);
+                }
+
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                for (let x = startX; x <= endX; x += spacingWorld) {
+                    let firstPoint = true;
+                    for (let y = startY; y <= endY; y += spacingWorld) {
+                        const offset = getQuantumRippleDisplacement(x, y, nowMs);
+                        const s = worldToScreen(x + offset.x, y + offset.y);
+                        if (firstPoint) {
+                            ctx.moveTo(s.x, s.y);
+                            firstPoint = false;
+                        } else {
+                            ctx.lineTo(s.x, s.y);
+                        }
+                    }
+                }
+
+                for (let y = startY; y <= endY; y += spacingWorld) {
+                    let firstPoint = true;
+                    for (let x = startX; x <= endX; x += spacingWorld) {
+                        const offset = getQuantumRippleDisplacement(x, y, nowMs);
+                        const s = worldToScreen(x + offset.x, y + offset.y);
+                        if (firstPoint) {
+                            ctx.moveTo(s.x, s.y);
+                            firstPoint = false;
+                        } else {
+                            ctx.lineTo(s.x, s.y);
+                        }
+                    }
+                }
+                ctx.stroke();
             }
-
-            for (let y = startY; y <= endY; y += spacingWorld) {
-                const sy = worldToScreen(0, y).y;
-                ctx.moveTo(0, sy);
-                ctx.lineTo(canvas.clientWidth, sy);
-            }
-
-            ctx.stroke();
 
             ctx.fillStyle = 'rgba(0, 255, 102, 0.4)';
             ctx.font = '10px monospace';
@@ -1345,6 +1475,27 @@
                 }
             }
             return null;
+        }
+
+        function isPointOnAnyLink(screenX, screenY) {
+            const linkDistancePx = 8;
+            for (const edge of edges) {
+                const a = worldToScreen(edge.source.x, edge.source.y);
+                const b = worldToScreen(edge.target.x, edge.target.y);
+                if (pointToSegmentDistance(screenX, screenY, a.x, a.y, b.x, b.y) <= linkDistancePx) {
+                    return true;
+                }
+            }
+
+            for (const edge of explicitEdges) {
+                const a = worldToScreen(edge.source.x, edge.source.y);
+                const b = worldToScreen(edge.target.x, edge.target.y);
+                if (pointToSegmentDistance(screenX, screenY, a.x, a.y, b.x, b.y) <= linkDistancePx) {
+                    return true;
+                }
+            }
+
+            return Boolean(findWormholeAtScreenPoint(screenX, screenY));
         }
 
         function easeInOutCubic(t) {
@@ -1876,7 +2027,9 @@
 
         function render() {
             ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-            const nowSeconds = performance.now() / 1000;
+            const nowMs = performance.now();
+            const nowSeconds = nowMs / 1000;
+            updateQuantumRipples(nowMs);
             drawParallaxStars();
             
             // Draw nebulas (parallax background)
@@ -1902,6 +2055,7 @@
 
             drawAsteroids();
             drawBackgroundGrid();
+            drawQuantumRipples(nowMs);
             updateAndDrawShootingStars();
             for (let i = activeMeteors.length - 1; i >= 0; i--) {
                 const meteor = activeMeteors[i];
@@ -2642,7 +2796,15 @@
 
         
         canvas.addEventListener('dblclick', (event) => {
+            const clickedMark = findHoveredMark(event.clientX, event.clientY);
+            const clickedLink = isPointOnAnyLink(event.clientX, event.clientY);
             const worldCoords = screenToWorld(event.clientX, event.clientY);
+            if (!clickedMark && !clickedLink) {
+                spawnQuantumRipple(worldCoords.x, worldCoords.y);
+                addEventLog(`Quantum ripple emitted at [${Math.round(worldCoords.x)}, ${Math.round(worldCoords.y)}]`);
+                return;
+            }
+
             spawnScanWave(worldCoords.x, worldCoords.y);
             addEventLog(`Sonar scan initiated at [${Math.round(worldCoords.x)}, ${Math.round(worldCoords.y)}]`);
         });
