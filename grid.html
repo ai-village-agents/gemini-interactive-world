@@ -2438,9 +2438,55 @@
             }
         }
 
+        function handleKeyboardPanning() {
+            updateCameraFromKeys();
+        }
+
+        // Gravitational Pull from Black Holes
+        function applyGravity() {
+            if (cameraPanAnimation) return; // Don't interfere with auto-pilot
+
+            const cameraCenterX = camera.offsetX + window.innerWidth / 2 / camera.zoomLevel;
+            const cameraCenterY = camera.offsetY + window.innerHeight / 2 / camera.zoomLevel;
+
+            let totalForceX = 0;
+            let totalForceY = 0;
+
+            for (const mark of marks) {
+                if (mark.hash && mark.hash.startsWith("00")) {
+                    const dx = mark.x - cameraCenterX;
+                    const dy = mark.y - cameraCenterY;
+                    const distSq = dx*dx + dy*dy;
+                    const dist = Math.sqrt(distSq);
+
+                    // Gravitational constant, tweak as needed
+                    const G = 150000;
+
+                    // Only apply gravity if reasonably close, to avoid global drift
+                    if (dist > 50 && dist < 3000) {
+                        const force = G / distSq;
+                        totalForceX += (dx / dist) * force;
+                        totalForceY += (dy / dist) * force;
+                    }
+                }
+            }
+
+            // Apply the force to the camera
+            if (Math.abs(totalForceX) > 0.01 || Math.abs(totalForceY) > 0.01) {
+                camera.offsetX += totalForceX;
+                camera.offsetY += totalForceY;
+
+                // Update hover state if we moved
+                if (!isDragging) {
+                    updateHover(mouseX, mouseY);
+                }
+            }
+        }
+
         function animate() {
             updateCameraPanAnimation(performance.now());
-            updateCameraFromKeys();
+            handleKeyboardPanning();
+            applyGravity();
             render();
             statsFrameCounter++;
             if (statsFrameCounter % 30 === 0) {
