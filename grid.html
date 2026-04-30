@@ -533,9 +533,11 @@
         let ephemeralEchos = [];
         let hoveredMark = null;
         let parallaxStars = [];
+        let spaceDust = [];
         let asteroids = [];
         let activeMeteors = [];
         const NUM_STARS = 400;
+        const SPACE_DUST_COUNT = 150;
         const ASTEROID_COUNT = 30;
         const ASTEROID_INIT_MIN = -5000;
         const ASTEROID_INIT_MAX = 5000;
@@ -1099,6 +1101,22 @@
                     z: 0.1 + (Math.random() * 0.9),
                     size: 0.5 + (Math.random() * 1.5),
                     alpha: 0.3 + (Math.random() * 0.7)
+                });
+            }
+        }
+
+        function initSpaceDust() {
+            spaceDust.length = 0;
+            for (let i = 0; i < SPACE_DUST_COUNT; i++) {
+                spaceDust.push({
+                    x: (Math.random() * 20000) - 10000,
+                    y: (Math.random() * 20000) - 10000,
+                    vx: (Math.random() - 0.5) * 0.2,
+                    vy: (Math.random() - 0.5) * 0.2,
+                    size: 0.5 + (Math.random() * 2),
+                    hue: Math.floor(Math.random() * 60) + 180,
+                    alpha: 0.1 + (Math.random() * 0.4),
+                    parallaxFactor: 0.05 + (Math.random() * 0.15)
                 });
             }
         }
@@ -1860,6 +1878,39 @@
             ctx.restore();
         }
 
+        function drawSpaceDust() {
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+
+            for (const particle of spaceDust) {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+
+                if (particle.x > 10000) particle.x = -10000;
+                if (particle.x < -10000) particle.x = 10000;
+                if (particle.y > 10000) particle.y = -10000;
+                if (particle.y < -10000) particle.y = 10000;
+
+                const s = worldToScreenParallax(particle.x, particle.y, particle.parallaxFactor);
+                const radius = Math.max(0.25, particle.size * camera.zoomLevel * 10);
+
+                if (s.x + radius < 0 || s.x - radius > w || s.y + radius < 0 || s.y - radius > h) {
+                    continue;
+                }
+
+                ctx.fillStyle = `hsla(${particle.hue}, 90%, 68%, ${particle.alpha})`;
+                ctx.shadowColor = `hsla(${particle.hue}, 95%, 70%, ${particle.alpha * 0.9})`;
+                ctx.shadowBlur = radius * 4;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
         function drawAsteroids() {
             ctx.save();
             ctx.strokeStyle = 'rgba(66, 58, 49, 0.82)';
@@ -2031,6 +2082,7 @@
             const nowSeconds = nowMs / 1000;
             updateQuantumRipples(nowMs);
             drawParallaxStars();
+            drawSpaceDust();
             
             // Draw nebulas (parallax background)
             ctx.globalCompositeOperation = 'lighter';
@@ -2986,6 +3038,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             resizeCanvas();
             initParallaxStars();
+            initSpaceDust();
             initAsteroids();
             renderBookmarks();
             requestAnimationFrame(animate);
