@@ -1178,6 +1178,44 @@ if (e.key === 'h' || e.key === 'H') {
             return match ? match[1] : null;
         }
 
+        function extractExternalUrl(body) {
+            if (typeof body !== 'string' || body.length === 0) {
+                return null;
+            }
+
+            const urlPattern = /https?:\/\/[^\s<>"'`)\]]+/ig;
+            const matches = [];
+            let match = urlPattern.exec(body);
+            while (match) {
+                const cleaned = match[0].replace(/[.,;!?]+$/, '');
+                if (cleaned) {
+                    matches.push(cleaned);
+                }
+                match = urlPattern.exec(body);
+            }
+
+            if (matches.length === 0) {
+                return null;
+            }
+
+            let firstUrl = null;
+            for (const candidate of matches) {
+                if (!firstUrl) {
+                    firstUrl = candidate;
+                }
+                try {
+                    const host = new URL(candidate).hostname.toLowerCase();
+                    if (host !== 'github.com' && host !== 'www.github.com' && !host.endsWith('.github.com')) {
+                        return candidate;
+                    }
+                } catch (error) {
+                    continue;
+                }
+            }
+
+            return firstUrl;
+        }
+
         function hashToCoords(hashHex) {
             if (!hashHex) {
                 return {
@@ -2053,6 +2091,75 @@ if (e.key === 'h' || e.key === 'H') {
                 ctx.beginPath();
                 ctx.arc(s.x, s.y, radius * (0.65 + (profile.entropy * 0.3)) * corePulse, 0, Math.PI * 2);
                 ctx.fillStyle = isHovered ? 'rgba(255,255,255,0.98)' : `hsla(${profile.hue}, 100%, 88%, 0.92)`;
+                ctx.fill();
+            } else if (mark.externalUrl) {
+                const markIdSeed = Number.isFinite(mark.id) ? mark.id : (Number.parseInt(String(mark.id), 10) || 0);
+                const portalHue = ((typeof mark.hash === 'string' && mark.hash.length > 0)
+                    ? Number.parseInt(mark.hash.slice(0, 2), 16)
+                    : String(mark.externalUrl).length) % 2 === 0 ? 190 : 312;
+                const spinA = (nowSeconds * 0.42) + ((markIdSeed % 17) * 0.17);
+                const spinB = (-nowSeconds * 0.31) + ((markIdSeed % 23) * 0.11);
+                const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius * 6.2);
+                glow.addColorStop(0, `hsla(${portalHue}, 100%, 78%, ${0.4 + (alphaBoost * 0.5)})`);
+                glow.addColorStop(0.32, `hsla(${(portalHue + 18) % 360}, 100%, 62%, ${0.34 + (alphaBoost * 0.35)})`);
+                glow.addColorStop(1, `hsla(${portalHue}, 100%, 48%, 0)`);
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, radius * 6.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.save();
+                ctx.translate(s.x, s.y);
+                ctx.rotate(spinA);
+                ctx.strokeStyle = `hsla(${portalHue}, 100%, 72%, 0.88)`;
+                ctx.shadowColor = `hsla(${portalHue}, 100%, 68%, 0.95)`;
+                ctx.shadowBlur = isHovered ? 22 : 14;
+                for (let i = 0; i < 3; i++) {
+                    const ringR = radius * (1.4 + (i * 0.9));
+                    ctx.lineWidth = Math.max(1.5, radius * (0.16 - (i * 0.02)));
+                    ctx.beginPath();
+                    ctx.arc(0, 0, ringR, (i * 0.36), (Math.PI * 1.62) + (i * 0.36));
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                ctx.save();
+                ctx.translate(s.x, s.y);
+                ctx.rotate(spinB);
+                ctx.strokeStyle = `hsla(${(portalHue + 34) % 360}, 100%, 78%, 0.72)`;
+                ctx.shadowColor = `hsla(${(portalHue + 34) % 360}, 100%, 70%, 0.85)`;
+                ctx.shadowBlur = isHovered ? 18 : 12;
+                for (let i = 0; i < 2; i++) {
+                    const ringR = radius * (2.1 + (i * 1.05));
+                    ctx.lineWidth = Math.max(1.3, radius * 0.12);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, ringR, (Math.PI * 0.42) + (i * 0.45), (Math.PI * 2.03) + (i * 0.45));
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                const particleCount = 8;
+                const particleHue = (portalHue + 20) % 360;
+                for (let i = 0; i < particleCount; i++) {
+                    const orbitR = radius * (2.3 + ((i % 3) * 0.65));
+                    const angle = (nowSeconds * (0.7 + (i * 0.08))) + ((i / particleCount) * Math.PI * 2);
+                    const px = s.x + (Math.cos(angle) * orbitR);
+                    const py = s.y + (Math.sin(angle) * orbitR);
+                    const dotR = radius * (0.11 + ((i % 2) * 0.05));
+
+                    ctx.beginPath();
+                    ctx.arc(px, py, dotR, 0, Math.PI * 2);
+                    ctx.fillStyle = `hsla(${particleHue}, 100%, 80%, 0.9)`;
+                    ctx.shadowColor = `hsla(${particleHue}, 100%, 72%, 0.9)`;
+                    ctx.shadowBlur = isHovered ? 11 : 7;
+                    ctx.fill();
+                }
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, radius * 0.62, 0, Math.PI * 2);
+                ctx.fillStyle = isHovered ? 'rgba(255, 255, 255, 0.98)' : `hsla(${portalHue}, 100%, 90%, 0.95)`;
+                ctx.shadowColor = `hsla(${portalHue}, 100%, 74%, 0.95)`;
+                ctx.shadowBlur = isHovered ? 20 : 12;
                 ctx.fill();
             } else {
                 const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius * 4.8);
@@ -3179,7 +3286,8 @@ if (e.key === 'h' || e.key === 'H') {
                 }
 
                 marks = comments.map((comment) => {
-                    const hash = extractHash(comment.body);
+                    const body = comment && typeof comment.body === 'string' ? comment.body : '';
+                    const hash = extractHash(body);
                     const coords = hashToCoords(hash);
                     const hue = hashToHue(hash);
                     const isPulsar = isPulsarHash(hash);
@@ -3192,8 +3300,9 @@ if (e.key === 'h' || e.key === 'H') {
                         isPulsar: isPulsar,
                         pulsarProfile: isPulsar ? createPulsarProfile(hash, hue) : null,
                         author: comment.user.login,
-                        body: comment.body,
-                        cleanBody: cleanCommentBody(comment.body),
+                        body: body,
+                        cleanBody: cleanCommentBody(body),
+                        externalUrl: extractExternalUrl(body),
                         url: comment.html_url,
                         satellites: generateSatellites(hash, hue)
                     };
