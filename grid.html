@@ -1845,6 +1845,7 @@
             vy: particle.baseVy
         }));
         const shootingStars = [];
+        const activeComets = [];
         
         function spawnMeteor() {
             const speed = 5 + (Math.random() * 6);
@@ -1939,6 +1940,141 @@
                     shootingStars.splice(i, 1);
                 }
             }
+        }
+
+        
+        function spawnComet() {
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+            const edge = Math.floor(Math.random() * 4);
+            const spawnPadding = 140;
+            let startX = 0;
+            let startY = 0;
+
+            if (edge === 0) { // top
+                startX = Math.random() * w;
+                startY = -spawnPadding;
+            } else if (edge === 1) { // right
+                startX = w + spawnPadding;
+                startY = Math.random() * h;
+            } else if (edge === 2) { // bottom
+                startX = Math.random() * w;
+                startY = h + spawnPadding;
+            } else { // left
+                startX = -spawnPadding;
+                startY = Math.random() * h;
+            }
+
+            const worldStart = screenToWorld(startX, startY);
+            const worldTarget = screenToWorld(w * 0.5, h * 0.5);
+            const angle = Math.atan2(worldTarget.y - worldStart.y, worldTarget.x - worldStart.x);
+            const speed = 15 + (Math.random() * 10);
+            const hue = 188 + (Math.random() * 18);
+
+            activeComets.push({
+                x: worldStart.x,
+                y: worldStart.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                tail: [],
+                maxTail: 150 + Math.floor(Math.random() * 100),
+                life: 1,
+                decay: 0.0018 + (Math.random() * 0.0014),
+                hue,
+                headSize: 3.8 + (Math.random() * 2.2)
+            });
+        }
+
+        function updateAndDrawComets() {
+            if (activeComets.length === 0) {
+                return;
+            }
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+
+            for (let i = activeComets.length - 1; i >= 0; i--) {
+                const comet = activeComets[i];
+                comet.x += comet.vx;
+                comet.y += comet.vy;
+                comet.life -= comet.decay;
+
+                comet.tail.unshift({ x: comet.x, y: comet.y });
+                if (comet.tail.length > comet.maxTail) {
+                    comet.tail.length = comet.maxTail;
+                }
+
+                const tailLen = comet.tail.length;
+                const scaledHeadSize = comet.headSize * camera.zoomLevel;
+                const coreRadius = scaledHeadSize * 5;
+                if (tailLen > 1) {
+                    const alphaBase = Math.max(0, comet.life * 0.9);
+                    const segmentExtendPx = Math.max(6, camera.zoomLevel * 5);
+                    ctx.shadowColor = 'rgba(0, 255, 255, 1)';
+                    ctx.shadowBlur = 20 * camera.zoomLevel;
+
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+
+                    for (let j = 0; j < tailLen - 1; j++) {
+                        const fromS = worldToScreen(comet.tail[j].x, comet.tail[j].y);
+                        const toS = worldToScreen(comet.tail[j + 1].x, comet.tail[j + 1].y);
+
+                        const dx = toS.x - fromS.x;
+                        const dy = toS.y - fromS.y;
+                        const segLen = Math.hypot(dx, dy);
+                        if (segLen < 0.0001) {
+                            continue;
+                        }
+
+                        const nx = dx / segLen;
+                        const ny = dy / segLen;
+                        const segT = 1 - (j / Math.max(1, tailLen - 1));
+
+                        const segAlpha = alphaBase * (0.2 + (segT * 0.9));
+                        const segColor = segT > 0.62
+                            ? `rgba(255, 255, 255, ${segAlpha})`
+                            : `rgba(0, 255, 255, ${segAlpha})`;
+                        ctx.strokeStyle = segColor;
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(fromS.x - nx * segmentExtendPx, fromS.y - ny * segmentExtendPx);
+                        ctx.lineTo(toS.x + nx * segmentExtendPx, toS.y + ny * segmentExtendPx);
+                        ctx.stroke();
+                    }
+                }
+
+                const cometS = worldToScreen(comet.x, comet.y);
+                const core = ctx.createRadialGradient(cometS.x, cometS.y, 0, cometS.x, cometS.y, coreRadius);
+                core.addColorStop(0, `rgba(255, 255, 255, ${Math.max(0, comet.life)})`);
+                core.addColorStop(0.35, `rgba(255, 255, 255, ${Math.max(0, comet.life * 0.98)})`);
+                core.addColorStop(0.72, `rgba(0, 255, 255, ${Math.max(0, comet.life * 0.85)})`);
+                core.addColorStop(1, 'rgba(0, 255, 255, 0)');
+                ctx.fillStyle = core;
+                ctx.shadowColor = 'rgba(0, 255, 255, 1)';
+                ctx.shadowBlur = 34 * camera.zoomLevel;
+                ctx.beginPath();
+                ctx.arc(cometS.x, cometS.y, coreRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, comet.life)})`;
+                ctx.beginPath();
+                ctx.arc(cometS.x, cometS.y, scaledHeadSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                const offscreen = (
+                    cometS.x < -320 ||
+                    cometS.x > canvas.clientWidth + 320 ||
+                    cometS.y < -320 ||
+                    cometS.y > canvas.clientHeight + 320
+                );
+                if (comet.life <= 0 || (offscreen && tailLen < 4)) {
+                    activeComets.splice(i, 1);
+                }
+            }
+
+            ctx.restore();
         }
 
         function drawParallaxStars() {
@@ -2213,6 +2349,7 @@
                 ctx.restore();
             }
             updateAndDrawShootingStars();
+            updateAndDrawComets();
             for (let i = activeMeteors.length - 1; i >= 0; i--) {
                 const meteor = activeMeteors[i];
                 const alpha = Math.max(0, meteor.life);
@@ -3131,6 +3268,9 @@
             applyGravity();
             if (Math.random() < 0.005) {
                 spawnMeteor();
+            }
+            if (Math.random() < 0.05) {
+                spawnComet();
             }
             render();
             statsFrameCounter++;
