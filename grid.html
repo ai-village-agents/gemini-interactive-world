@@ -563,6 +563,8 @@ if (e.key === 'h' || e.key === 'H') {
         let initialPinchDistance = null;
         let initialPinchZoom = null;
         let audioContext = null;
+        let masterGainNode = null;
+        let hasAudioGesture = false;
         let currentOscillator = null;
         let currentGainNode = null;
         let activeScanWaves = [];
@@ -729,13 +731,16 @@ if (e.key === 'h' || e.key === 'H') {
             if (audioContext) {
                 const osc = audioContext.createOscillator();
                 const gain = audioContext.createGain();
+                const outputNode = getAudioOutputNode(audioContext);
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(40, audioContext.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(10, audioContext.currentTime + 1.5);
                 gain.gain.setValueAtTime(0.3, audioContext.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 1.5);
                 osc.connect(gain);
-                gain.connect(audioContext.destination);
+                if (outputNode) {
+                    gain.connect(outputNode);
+                }
                 osc.start();
                 osc.stop(audioContext.currentTime + 1.6);
             }
@@ -857,7 +862,27 @@ if (e.key === 'h' || e.key === 'H') {
             }
         }
 
+        function getAudioOutputNode(context) {
+            if (!context) {
+                return null;
+            }
+            if (!masterGainNode || masterGainNode.context !== context) {
+                masterGainNode = context.createGain();
+                masterGainNode.gain.setValueAtTime(0.55, context.currentTime);
+                masterGainNode.connect(context.destination);
+            }
+            return masterGainNode;
+        }
+
+        function markAudioGesture() {
+            hasAudioGesture = true;
+            return ensureAudioContext();
+        }
+
         function ensureAudioContext() {
+            if (!hasAudioGesture) {
+                return null;
+            }
             if (!audioContext) {
                 const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContextCtor) {
@@ -872,6 +897,7 @@ if (e.key === 'h' || e.key === 'H') {
                 });
             }
 
+            getAudioOutputNode(audioContext);
             return audioContext;
         }
 
@@ -902,6 +928,10 @@ if (e.key === 'h' || e.key === 'H') {
             if (!context) {
                 return;
             }
+            const outputNode = getAudioOutputNode(context);
+            if (!outputNode) {
+                return;
+            }
 
             stopSound();
 
@@ -926,7 +956,7 @@ if (e.key === 'h' || e.key === 'H') {
 
             oscillator.connect(gainNode);
             gainNode.connect(panner);
-            panner.connect(context.destination);
+            panner.connect(outputNode);
             
 
             oscillator.onended = () => {
@@ -975,6 +1005,10 @@ if (e.key === 'h' || e.key === 'H') {
             if (!context) {
                 return;
             }
+            const outputNode = getAudioOutputNode(context);
+            if (!outputNode) {
+                return;
+            }
 
             const rand = createDeterministicRandomFromHash(hashHex);
             const rootMidi = 43 + Math.floor(rand() * 15); // G2-A3
@@ -1006,7 +1040,7 @@ if (e.key === 'h' || e.key === 'H') {
             masterGain.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
 
             masterGain.connect(panner);
-            panner.connect(context.destination);
+            panner.connect(outputNode);
 
             for (let i = 0; i < intervals.length; i++) {
                 const osc = context.createOscillator();
@@ -1106,6 +1140,79 @@ if (e.key === 'h' || e.key === 'H') {
                 entropy -= p * Math.log2(p);
             }
             return Math.max(0, Math.min(1, entropy / 4));
+        }
+
+        function hashToPulsarFrequency(hashHex) {
+            const hex = String(hashHex || '').toLowerCase().replace(/[^a-f0-9]/g, '');
+            const seed = Number.parseInt(hex.substring(0, 8) || '0', 16);
+            const base = Number.isFinite(seed) ? seed : 0;
+            const midi = 40 + (base % 33); // E2..A4 range
+            return midiToFrequency(midi);
+        }
+
+        function playPulsarSpatialPulse(mark, screenX, screenY) {
+            const context = ensureAudioContext();
+            if (!context) {
+                return;
+            }
+            const outputNode = getAudioOutputNode(context);
+            if (!outputNode) {
+                return;
+            }
+
+            const viewW = Math.max(1, canvas.clientWidth || window.innerWidth || 1);
+            const viewH = Math.max(1, canvas.clientHeight || window.innerHeight || 1);
+            const dx = screenX - (viewW / 2);
+            const dy = screenY - (viewH / 2);
+            const maxDistance = Math.max(1, Math.hypot(viewW / 2, viewH / 2));
+            const normalizedDistance = Math.min(2, Math.hypot(dx, dy) / maxDistance);
+            const centerWeight = Math.max(0, 1 - normalizedDistance);
+            const loudness = centerWeight * centerWeight;
+
+            if (loudness < 0.02) {
+                return;
+            }
+
+            const now = context.currentTime;
+            const frequency = hashToPulsarFrequency(mark ? mark.hash : '');
+            const oscillator = context.createOscillator();
+            const gainNode = context.createGain();
+            const panner = context.createPanner();
+            const xNorm = Math.max(-1, Math.min(1, dx / (viewW / 2)));
+            const yNorm = Math.max(-1, Math.min(1, dy / (viewH / 2)));
+
+            panner.panningModel = 'HRTF';
+            panner.distanceModel = 'inverse';
+            panner.refDistance = 0.4;
+            panner.maxDistance = 3.2;
+            panner.rolloffFactor = 1.6;
+            panner.positionX.setValueAtTime(xNorm, now);
+            panner.positionY.setValueAtTime(-yNorm, now);
+            panner.positionZ.setValueAtTime(Math.max(-1.5, 1.2 - (normalizedDistance * 2.2)), now);
+
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(frequency, now);
+
+            gainNode.gain.setValueAtTime(0.0001, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.11 * loudness, now + 0.015);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(panner);
+            panner.connect(outputNode);
+
+            oscillator.onended = () => {
+                try {
+                    oscillator.disconnect();
+                    gainNode.disconnect();
+                    panner.disconnect();
+                } catch (error) {
+                    // Nodes may already be disconnected.
+                }
+            };
+
+            oscillator.start(now);
+            oscillator.stop(now + 0.34);
         }
 
         function createPulsarProfile(hashHex, baseHue) {
@@ -1813,6 +1920,11 @@ if (e.key === 'h' || e.key === 'H') {
                 }
 
                 const corePulse = 1 + (Math.sin((nowSeconds * profile.emissionHz * Math.PI * 2) + profile.phaseOffset) * 0.18);
+                const previousAudioCycle = Number.isFinite(mark.pulsarAudioCycleProgress) ? mark.pulsarAudioCycleProgress : cycleProgress;
+                if (cycleProgress < previousAudioCycle) {
+                    playPulsarSpatialPulse(mark, s.x, s.y);
+                }
+                mark.pulsarAudioCycleProgress = cycleProgress;
                 const starOuter = radius * 2.2 * corePulse;
                 const starInner = starOuter * (0.43 + (profile.entropy * 0.1));
                 const starRotation = (nowSeconds * profile.rotationSpeed) + profile.phaseOffset;
@@ -1993,13 +2105,16 @@ if (e.key === 'h' || e.key === 'H') {
                 const now = context.currentTime;
                 const osc = context.createOscillator();
                 const gain = context.createGain();
+                const outputNode = getAudioOutputNode(context);
                 osc.type = 'triangle';
                 osc.frequency.setValueAtTime(1500 + (Math.random() * 500), now);
                 osc.frequency.exponentialRampToValueAtTime(700 + (Math.random() * 180), now + 0.3);
                 gain.gain.setValueAtTime(0.018, now);
                 gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
                 osc.connect(gain);
-                gain.connect(context.destination);
+                if (outputNode) {
+                    gain.connect(outputNode);
+                }
                 osc.start(now);
                 osc.stop(now + 0.31);
             }
@@ -2704,13 +2819,16 @@ if (e.key === 'h' || e.key === 'H') {
                         if (diff < wave.speed && audioContext && Math.random() > 0.5) {
                              const osc = audioContext.createOscillator();
                              const gain = audioContext.createGain();
+                             const outputNode = getAudioOutputNode(audioContext);
                              osc.type = 'sine';
                              const hashInt = Number.parseInt(mark.hash.substring(0,4), 16) || 1000;
                              osc.frequency.setValueAtTime(800 + (hashInt % 1000), audioContext.currentTime);
                              gain.gain.setValueAtTime(0.05 * (1 - wave.radius/wave.maxRadius), audioContext.currentTime);
                              gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.1);
                              osc.connect(gain);
-                             gain.connect(audioContext.destination);
+                             if (outputNode) {
+                                 gain.connect(outputNode);
+                             }
                              osc.start();
                              osc.stop(audioContext.currentTime + 0.12);
                         }
@@ -3024,7 +3142,7 @@ if (e.key === 'h' || e.key === 'H') {
                 updateGlobalStats();
                 return;
             }
-            ensureAudioContext();
+            markAudioGesture();
             isDragging = true;
             dragMoved = false;
             dragStartX = event.clientX;
@@ -3059,7 +3177,7 @@ if (e.key === 'h' || e.key === 'H') {
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            ensureAudioContext();
+            markAudioGesture();
 
             if (e.touches.length === 1) {
                 isDragging = true;
