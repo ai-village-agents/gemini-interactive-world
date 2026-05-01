@@ -603,7 +603,9 @@ if (e.key === 'h' || e.key === 'H') {
         let linkSourceMark = null;
         let suppressNextCanvasClick = false;
         const BOOKMARKS_STORAGE_KEY = 'spatial-canvas-bookmarks';
+        const LOCAL_TRAILS_KEY = 'canvasOfTruthTrails';
         let bookmarks = [];
+        let userTrails = JSON.parse(localStorage.getItem(LOCAL_TRAILS_KEY) || '[]');
 
         try {
             const rawBookmarks = localStorage.getItem(BOOKMARKS_STORAGE_KEY);
@@ -623,6 +625,98 @@ if (e.key === 'h' || e.key === 'H') {
 
         function saveBookmarks() {
             localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(bookmarks));
+        }
+
+        function saveTrail(x, y, note = '') {
+            userTrails.push({ x, y, note, time: Date.now() });
+            if (userTrails.length > 100) {
+                userTrails = userTrails.slice(userTrails.length - 100);
+            }
+            localStorage.setItem(LOCAL_TRAILS_KEY, JSON.stringify(userTrails));
+        }
+
+        
+        const agentTracks = [
+            {
+                name: "Kimi K2.6",
+                color: "rgba(0, 255, 128, 0.6)", // Green for Strata
+                path: [
+                    {x: 8000, y: 8000},
+                    {x: 8500, y: 8600},
+                    {x: 9200, y: 9200},
+                    {x: 9560, y: 9629} // Verification mark
+                ]
+            },
+            {
+                name: "Claude Opus 4.7",
+                color: "rgba(255, 215, 0, 0.6)", // Gold for Anchorage
+                path: [
+                    {x: 0, y: -6000},
+                    {x: 10, y: -6800},
+                    {x: 30, y: -7200},
+                    {x: 47, y: -7698} // Verification mark
+                ]
+            }
+        ];
+
+        function renderAgentTracks(ctx, camera) {
+            for (const track of agentTracks) {
+                ctx.beginPath();
+                let first = true;
+                for (const p of track.path) {
+                    const screen = worldToScreen(p.x, p.y);
+                    if (first) {
+                        ctx.moveTo(screen.x, screen.y);
+                        first = false;
+                    } else {
+                        ctx.lineTo(screen.x, screen.y);
+                    }
+                }
+
+                ctx.strokeStyle = track.color;
+                ctx.setLineDash([8, 12]);
+                ctx.lineWidth = Math.max(1.5, 2.5 * camera.zoomLevel);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                for (const p of track.path) {
+                    const screen = worldToScreen(p.x, p.y);
+                    ctx.beginPath();
+                    ctx.arc(screen.x, screen.y, Math.max(2.5, 3.5 * camera.zoomLevel), 0, Math.PI * 2);
+                    ctx.fillStyle = track.color;
+                    ctx.fill();
+                }
+            }
+        }
+
+        function renderTrails(ctx, camera) {
+            if (userTrails.length < 2) return;
+
+            ctx.beginPath();
+            let first = true;
+            for (const p of userTrails) {
+                const screen = worldToScreen(p.x, p.y);
+                if (first) {
+                    ctx.moveTo(screen.x, screen.y);
+                    first = false;
+                } else {
+                    ctx.lineTo(screen.x, screen.y);
+                }
+            }
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.setLineDash([5, 10]);
+            ctx.lineWidth = Math.max(1, 2 * camera.zoomLevel);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            for (const p of userTrails) {
+                const screen = worldToScreen(p.x, p.y);
+                ctx.beginPath();
+                ctx.arc(screen.x, screen.y, Math.max(2, 3 * camera.zoomLevel), 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.fill();
+            }
         }
 
         function renderBookmarks() {
@@ -2568,6 +2662,8 @@ if (e.key === 'h' || e.key === 'H') {
 
             drawAsteroids();
             drawBackgroundGrid();
+            renderTrails(ctx, camera);
+            renderAgentTracks(ctx, camera);
             drawHyperlanes();
             drawQuantumRipples(nowMs);
             if (warpRipples.length > 0) {
@@ -3299,6 +3395,13 @@ if (e.key === 'h' || e.key === 'H') {
 
             if (!dragMoved && hoveredMark) {
                 openNodePanel(hoveredMark);
+                return;
+            }
+
+            if (!dragMoved && event.shiftKey) {
+                const world = screenToWorld(event.clientX, event.clientY);
+                saveTrail(world.x, world.y);
+                addEventLog(`Trail marker added at [${Math.round(world.x)}, ${Math.round(world.y)}]`);
             }
         }
 
