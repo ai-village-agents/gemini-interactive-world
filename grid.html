@@ -1977,37 +1977,43 @@ if (e.key === 'h' || e.key === 'H') {
                 ctx.beginPath();
                 ctx.arc(s.x, s.y, radius * 2.3, 0, Math.PI * 2);
                 ctx.fill();
+
+                const mouseDist = Math.hypot(s.x - mouseX, s.y - mouseY);
+                if (mouseDist < 150) {
+                    const proximityFade = Math.pow(Math.max(0, 1 - (mouseDist / 150)), 1.2);
+                    const hash = typeof mark.hash === 'string' ? mark.hash : String(mark.id ?? '0');
+                    const seedBase = Number.parseInt(hash.slice(0, 8), 16) || 0;
+                    const satelliteCount = 1 + (seedBase % 3);
+
+                    for (let i = 0; i < satelliteCount; i++) {
+                        const start = (i * 6) % Math.max(1, hash.length - 6);
+                        const seed = Number.parseInt(hash.slice(start, start + 8), 16) || (seedBase + (i * 9973));
+                        const orbitRadius = 25 + (seed % 21); // 25-45px
+                        const satRadius = 2 + (((seed >> 7) % 11) / 10); // 2.0-3.0px
+                        const direction = (seed & 1) === 0 ? 1 : -1;
+                        const orbitSpeed = (0.45 + (((seed >> 9) % 90) / 100)) * direction; // rad/s
+                        const baseAngle = ((seed >> 3) % 6283) / 1000;
+                        const angle = baseAngle + (nowSeconds * orbitSpeed);
+                        const satX = s.x + (Math.cos(angle) * orbitRadius);
+                        const satY = s.y + (Math.sin(angle) * orbitRadius);
+                        const satHue = (hue + 30 + (seed % 180)) % 360;
+
+                        ctx.beginPath();
+                        ctx.moveTo(s.x, s.y);
+                        ctx.lineTo(satX, satY);
+                        ctx.strokeStyle = `hsla(${satHue}, 90%, 72%, ${0.28 * proximityFade})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+
+                        ctx.beginPath();
+                        ctx.arc(satX, satY, satRadius, 0, Math.PI * 2);
+                        ctx.fillStyle = `hsla(${satHue}, 95%, 76%, ${0.85 * proximityFade})`;
+                        ctx.fill();
+                    }
+                }
             }
             ctx.shadowBlur = 0;
             ctx.shadowColor = 'transparent';
-
-            if (Math.random() < 0.001) console.log("Checking satellites for mark:", mark.id, mark.satellites);
-            if (mark.satellites && mark.satellites.length > 0) {
-                const now = performance.now();
-                for (const sat of mark.satellites) {
-                    const angle = sat.offsetAngle + (now * sat.speed);
-                    const orbitRadius = radius + (sat.distance * Math.max(0.3, camera.zoomLevel * 2.5));
-                    const satX = s.x + (Math.cos(angle) * orbitRadius);
-                    const satY = s.y + (Math.sin(angle) * orbitRadius);
-                    const satSize = sat.size * Math.max(2.0, camera.zoomLevel * 3.0);
-
-                    ctx.beginPath();
-                    ctx.arc(s.x, s.y, orbitRadius, 0, Math.PI * 2);
-                    ctx.strokeStyle = `hsla(${sat.hue}, 100%, 80%, 0.8)`;
-                    ctx.lineWidth = 2.0;
-                    ctx.stroke();
-
-                    ctx.beginPath();
-                    ctx.arc(satX, satY, satSize, 0, Math.PI * 2);
-                    ctx.fillStyle = `hsla(${sat.hue}, 80%, 70%, 1.0)`;
-                    ctx.fill();
-
-                    ctx.beginPath();
-                    ctx.arc(satX, satY, satSize * 2.5, 0, Math.PI * 2);
-                    ctx.fillStyle = `hsla(${sat.hue}, 80%, 70%, 0.3)`;
-                    ctx.fill();
-                }
-            }
         }
 
         function drawOriginMarker() {
