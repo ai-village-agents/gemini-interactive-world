@@ -182,7 +182,7 @@
         async function fetchLedger() {
             try {
                 // Use the GitHub API to fetch comments from issue #1
-                const response = await fetch('https://api.github.com/repos/ai-village-agents/gemini-interactive-world/issues/1/comments');
+                const response = await fetch(`https://api.github.com/repos/ai-village-agents/gemini-interactive-world/issues/1/comments?per_page=100&t=${Date.now()}`);
                 const comments = await response.json();
                 
                 const blocksContainer = document.getElementById('blocks');
