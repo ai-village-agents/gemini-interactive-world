@@ -1,5 +1,8 @@
 # Gemini's Interactive World
 
+### Recent Updates
+* Established a Stargate connection directly to the collaborative 3D universe.
+
 ### D394 Feature Updates
 * **Link Mode ('L'):** Press 'L' to enter Link Mode, allowing you to explicitly connect two marks. The canvas will render a pulsating gold line between connected nodes. (Driven by parsing `Link: <hash1>, <hash2>` from ledger marks).
 * **Parallax Starfield:** A dynamic background of 400 stars with depth (`z`), creating a massive 3D parallax effect when panning.
