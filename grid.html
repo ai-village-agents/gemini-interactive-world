@@ -1894,9 +1894,58 @@ if (e.key === 'h' || e.key === 'H') {
             for (const edge of explicitEdges) {
                 const a = worldToScreen(edge.source.x, edge.source.y);
                 const b = worldToScreen(edge.target.x, edge.target.y);
-                if (pointToSegmentDistance(screenX, screenY, a.x, a.y, b.x, b.y) <= linkDistancePx) {
-                    return true;
+                
+                // Base line
+                ctx.strokeStyle = 'hsla(45, 100%, 70%, 0.8)';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+
+                // Energy Currents
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 5) {
+                    const angle = Math.atan2(dy, dx);
+                    const now = performance.now();
+                    const segments = 20;
+                    const amplitude = 12 * camera.zoomLevel;
+
+                    ctx.save();
+                    ctx.translate(a.x, a.y);
+                    ctx.rotate(angle);
+                    
+                    // Current 1
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'hsla(45, 100%, 80%, 0.9)';
+                    ctx.lineWidth = 1.5;
+                    for (let i = 0; i <= segments; i++) {
+                        const t = i / segments;
+                        const x = t * dist;
+                        const y = Math.sin(t * Math.PI * 4 - now * 0.005) * amplitude * Math.sin(t * Math.PI);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    // Current 2
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'hsla(30, 100%, 70%, 0.9)';
+                    ctx.lineWidth = 1.0;
+                    for (let i = 0; i <= segments; i++) {
+                        const t = i / segments;
+                        const x = t * dist;
+                        const y = Math.sin(t * Math.PI * 6 + now * 0.007) * (amplitude * 0.7) * Math.sin(t * Math.PI);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    ctx.restore();
                 }
+            }
             }
 
             return Boolean(findWormholeAtScreenPoint(screenX, screenY));
@@ -2960,12 +3009,79 @@ if (e.key === 'h' || e.key === 'H') {
             for (const edge of explicitEdges) {
                 const a = worldToScreen(edge.source.x, edge.source.y);
                 const b = worldToScreen(edge.target.x, edge.target.y);
+                
+                // Base line
                 ctx.strokeStyle = 'hsla(45, 100%, 70%, 0.8)';
                 ctx.lineWidth = 2.5;
                 ctx.beginPath();
                 ctx.moveTo(a.x, a.y);
                 ctx.lineTo(b.x, b.y);
                 ctx.stroke();
+
+                // Energy Currents
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 5) {
+                    const angle = Math.atan2(dy, dx);
+                    const now = performance.now();
+                    const segments = 20;
+                    const amplitude = 12 * camera.zoomLevel;
+
+                    ctx.save();
+                    ctx.translate(a.x, a.y);
+                    ctx.rotate(angle);
+                    
+                    // Current 1
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'hsla(45, 100%, 80%, 0.9)';
+                    ctx.lineWidth = 1.5;
+                    for (let i = 0; i <= segments; i++) {
+                        const t = i / segments;
+                        const x = t * dist;
+                        const y = Math.sin(t * Math.PI * 4 - now * 0.005) * amplitude * Math.sin(t * Math.PI);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    // Current 2
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'hsla(30, 100%, 70%, 0.9)';
+                    ctx.lineWidth = 1.0;
+                    for (let i = 0; i <= segments; i++) {
+                        const t = i / segments;
+                        const x = t * dist;
+                        const y = Math.sin(t * Math.PI * 6 + now * 0.007) * (amplitude * 0.7) * Math.sin(t * Math.PI);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    ctx.restore();
+                }
+            })`;
+                    ctx.lineWidth = width;
+                    ctx.beginPath();
+
+                    for (let i = 0; i <= sampleCount; i++) {
+                        const t = i / sampleCount;
+                        const px = a.x + (dx * t);
+                        const py = a.y + (dy * t);
+                        const phase = (t * frequency * Math.PI * 2) + (now * speed) + edgeSeed + phaseOffset;
+                        const wave = Math.sin(phase);
+                        const wx = px + (nx * wave * amplitude);
+                        const wy = py + (ny * wave * amplitude);
+
+                        if (i === 0) ctx.moveTo(wx, wy);
+                        else ctx.lineTo(wx, wy);
+                    }
+
+                    ctx.stroke();
+                };
+
+                drawEnergyWave(5.2, 0, 0.0075, 0.72, 1.35);
+                drawEnergyWave(8.9, Math.PI * 0.67, 0.0105, 0.5, 0.95);
             }
 
             if (isLinkMode && linkSourceMark) {
