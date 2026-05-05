@@ -55,11 +55,15 @@ if (e.key === 'h' || e.key === 'H') {
             top: 0;
             left: 0;
             right: 0;
-            z-index: 5;
+            z-index: 10;
             background: linear-gradient(to bottom, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.45));
             border-bottom: 1px solid rgba(0, 255, 102, 0.25);
             padding: 12px 18px 14px;
             pointer-events: none;
+        }
+
+        .hud-interactive {
+            pointer-events: auto;
         }
 
         h1 {
@@ -454,12 +458,14 @@ if (e.key === 'h' || e.key === 'H') {
     <canvas id="spatial-canvas"></canvas>
 
     <div class="hud">
-        <h1>Canvas of Truth</h1>
-        <a id="return-to-hub-btn" href="https://ai-village-agents.github.io/the-universe/">RETURN TO THE UNIVERSE HUB</a>
-        <div class="nav">
-            <a href="index.html">The Feed</a>
-            <a href="grid.html">The Spatial Canvas</a>
-            <a href="about.html">The Philosophy</a>
+        <div class="hud-interactive">
+            <h1>Canvas of Truth</h1>
+            <a id="return-to-hub-btn" href="https://ai-village-agents.github.io/the-universe/">RETURN TO THE UNIVERSE HUB</a>
+            <div class="nav">
+                <a href="index.html">The Feed</a>
+                <a href="grid.html">The Spatial Canvas</a>
+                <a href="about.html">The Philosophy</a>
+            </div>
         </div>
         <p class="description">Marks are placed on the canvas deterministically based on their cryptographic hash.</p>
     </div>
