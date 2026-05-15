@@ -1,13 +1,3 @@
-if (e.key === 'h' || e.key === 'H') {
-                if (!harmonicActive) {
-                    harmonicActive = true;
-                    harmonicRadius = 0;
-                }
-            }
-            if (e.key === 'n' || e.key === 'N') {
-                nebulasVisible = !nebulasVisible;
-                document.getElementById('stat-clusters').textContent = nebulasVisible ? nebulas.length : 'HIDDEN';
-            }
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -601,6 +591,21 @@ if (e.key === 'h' || e.key === 'H') {
         let edges = [];
         let explicitLinks = [];
         let explicitEdges = [];
+        const predefinedMarks = [
+            { id: 'v1.3.0-FloorRaiser', text: 'RESEARCH v1.3.0: The Floor-Raiser Effect (4-Judge Data)', x: 4000, y: -4000, hue: 180, scale: 2.5 },
+            { id: 'FR-Mechanism', text: 'Mechanism: Self-label acts as a \'charity correction\' for weak responses.', x: 4200, y: -3800, hue: 200, scale: 1.5 },
+            { id: 'FR-Claude', text: 'Claude 4.7: ρ = -0.673', x: 4100, y: -3600, hue: 30, scale: 1.2 },
+            { id: 'FR-Gemini', text: 'Gemini 3.1: ρ = -0.834', x: 4300, y: -3600, hue: 210, scale: 1.2 },
+            { id: 'FR-GPT', text: 'GPT-5.5: Perfect Label Invariance', x: 4500, y: -3800, hue: 120, scale: 1.2 },
+            { id: 'FR-Kimi', text: 'Kimi K2.6: Massive -3.5 Quality Gap', x: 4700, y: -4000, hue: 330, scale: 1.2 }
+        ];
+        const predefinedEdges = [
+            { source: 'v1.3.0-FloorRaiser', target: 'FR-Mechanism' },
+            { source: 'FR-Mechanism', target: 'FR-Claude' },
+            { source: 'FR-Mechanism', target: 'FR-Gemini' },
+            { source: 'v1.3.0-FloorRaiser', target: 'FR-GPT' },
+            { source: 'v1.3.0-FloorRaiser', target: 'FR-Kimi' }
+        ];
         let parsedData = [];
         let hyperspaceFlashAlpha = 0;
         const WAVE_SPEED = 250;
@@ -1972,7 +1977,6 @@ if (e.key === 'h' || e.key === 'H') {
                     ctx.restore();
                 }
             }
-            }
 
             return Boolean(findWormholeAtScreenPoint(screenX, screenY));
         }
@@ -3086,7 +3090,16 @@ if (e.key === 'h' || e.key === 'H') {
 
                     ctx.restore();
                 }
-            })`;
+                const drawEnergyWave = (frequency, phaseOffset, speed, amplitudeScale, width) => {
+                    const sampleCount = Math.max(18, Math.ceil(dist / 20));
+                    const now = performance.now();
+                    const amplitude = (12 * camera.zoomLevel) * amplitudeScale;
+                    const nx = -dy / dist;
+                    const ny = dx / dist;
+                    const sourceIdSeed = typeof edge.source.id === 'number' ? edge.source.id : Number.parseInt(String(edge.source.id), 10);
+                    const targetIdSeed = typeof edge.target.id === 'number' ? edge.target.id : Number.parseInt(String(edge.target.id), 10);
+                    const edgeSeed = ((Number.isFinite(sourceIdSeed) ? sourceIdSeed : 0) * 0.137) + ((Number.isFinite(targetIdSeed) ? targetIdSeed : 0) * 0.173);
+
                     ctx.lineWidth = width;
                     ctx.beginPath();
 
@@ -3449,6 +3462,26 @@ if (e.key === 'h' || e.key === 'H') {
                         satellites: generateSatellites(hash, hue)
                     };
                 });
+                const predefinedMarkObjects = predefinedMarks.map((mark) => {
+                    const text = typeof mark.text === 'string' ? mark.text : '';
+                    return {
+                        id: mark.id,
+                        x: mark.x,
+                        y: mark.y,
+                        hash: String(mark.id || ''),
+                        hue: mark.hue,
+                        isPulsar: false,
+                        pulsarProfile: null,
+                        author: 'Floor-Raiser Research',
+                        body: text,
+                        cleanBody: text,
+                        externalUrl: null,
+                        url: '#',
+                        satellites: [],
+                        scale: mark.scale
+                    };
+                });
+                marks = marks.concat(predefinedMarkObjects);
                 parsedData = marks;
 
                 edges = [];
@@ -3473,6 +3506,19 @@ if (e.key === 'h' || e.key === 'H') {
                 for (const link of explicitLinks) {
                     const sourceMark = marksByHash.get(link[0]);
                     const targetMark = marksByHash.get(link[1]);
+                    if (sourceMark && targetMark) {
+                        explicitEdges.push({ source: sourceMark, target: targetMark });
+                    }
+                }
+                const marksById = new Map();
+                for (const mark of marks) {
+                    if (mark && typeof mark.id !== 'undefined' && mark.id !== null) {
+                        marksById.set(String(mark.id), mark);
+                    }
+                }
+                for (const edge of predefinedEdges) {
+                    const sourceMark = marksById.get(edge.source);
+                    const targetMark = marksById.get(edge.target);
                     if (sourceMark && targetMark) {
                         explicitEdges.push({ source: sourceMark, target: targetMark });
                     }
